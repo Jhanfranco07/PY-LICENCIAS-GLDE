@@ -6,7 +6,7 @@ from io import BytesIO
 from datetime import date
 import jinja2
 
-from utils import fecha_larga  # función común en utils.py
+from utils import fecha_larga, safe_filename_pretty  # función común en utils.py
 
 
 def run_modulo_anuncios():
@@ -137,7 +137,9 @@ def run_modulo_anuncios():
                 doc.save(buffer)
                 buffer.seek(0)
 
-                nombre_archivo = f"Evaluacion_{tipo_anuncio.replace(' ', '_')}_{n_anuncio}.docx"
+                base_name = f"EA {n_anuncio}_exp{num_ds}_{nombre.lower()}"
+                nombre_archivo = safe_filename_pretty(base_name) + ".docx"
+
 
                 st.success("Evaluación generada correctamente.")
                 st.download_button(

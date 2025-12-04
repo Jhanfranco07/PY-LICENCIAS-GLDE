@@ -7,7 +7,7 @@ from licencias.app_compatibilidad import run_modulo_compatibilidad
 
 
 def main():
-    # 👇 solo aquí se configura la página
+    
     st.set_page_config(
         page_title="Generador de Documentos – GLDE",
         page_icon="🧾",
