@@ -14,7 +14,7 @@ def run_modulo_anuncios():
 
     # Rutas de plantillas (carpeta en la RAÍZ del proyecto)
     TEMPLATES_EVAL = {
-        "PANEL SIMPLE - AZOTEAS": "plantillas_publi/evaluacion_panel_simple_azotea.docx",
+        "PANEL SIMPLE - AZOTEAS": "plantillas_publicidad/evaluacion_panel_simple_azotea.docx",
         "LETRAS RECORTADAS": "plantillas_publi/evaluacion_letras_recortadas.docx",
         "PANEL SIMPLE - ESTACIONES DE SERVICIO": "plantillas_publi/evaluacion_panel_simple_estacion.docx",
         "TOLDO SENCILLO": "plantillas_publi/evaluacion_toldo_sencillo.docx",
