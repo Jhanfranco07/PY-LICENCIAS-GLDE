@@ -21,7 +21,6 @@ def run_modulo_anuncios():
         "PANEL SENCILLO Y LUMINOSO": "plantillas_publicidad/evaluacion_panel_sencillo_luminoso.docx",
     }
 
-    # 👉 adapta estos nombres a tus archivos reales de certificado
     TEMPLATES_CERT = {
         "PANEL SIMPLE - AZOTEAS": "plantillas_publicidad/certificado_panel_simple_azotea.docx",
         "LETRAS RECORTADAS": "plantillas_publicidad/certificado_letras_recortadas.docx",
@@ -41,11 +40,13 @@ def run_modulo_anuncios():
     #                    MÓDULO 1 · EVALUACIÓN
     # -------------------------------------------------------------------------
 
-    # Lógica de campos adicionales
+    # Estos tipos usan GROSOR en las dimensiones
     usa_grosor = tipo_anuncio in (
         "PANEL SENCILLO Y LUMINOSO",
         "LETRAS RECORTADAS",
+        "TOLDO SENCILLO",           # 🔹 agregado
     )
+    # Este tipo usa ALTURA (soporte) extra
     usa_altura_extra = tipo_anuncio == "PANEL SIMPLE - AZOTEAS"
 
     grosor = 0.0
@@ -198,6 +199,7 @@ def run_modulo_anuncios():
                 "Leyenda": eval_ctx.get("leyenda"),
                 "Dimensiones": f"{eval_ctx.get('largo')} x {eval_ctx.get('alto')}",
                 "Grosor": eval_ctx.get("grosor"),
+                "Altura (soporte)": eval_ctx.get("altura"),
                 "Caras": eval_ctx.get("num_cara"),
                 "Colores": eval_ctx.get("colores"),
                 "Material": eval_ctx.get("material"),
@@ -279,14 +281,15 @@ def run_modulo_anuncios():
 
             "largo": eval_ctx.get("largo", ""),
             "alto": eval_ctx.get("alto", ""),
-            "grosor": eval_ctx.get("grosor", ""),
+            "grosor": eval_ctx.get("grosor", ""),   # usado por letras/panel luminoso/toldo
+            "altura": eval_ctx.get("altura", ""),   # usado por panel azotea (SOPORTE)
             "color": eval_ctx.get("colores", ""),
             "material": eval_ctx.get("material", ""),
             "num_cara": eval_ctx.get("num_cara", ""),
 
             "fisico": fisico,
             "tecnico": tecnico,
-            "fecha": fecha_larga(fecha_cert),   # PACHACÁMAC, {{fecha}}
+            "fecha": fecha_larga(fecha_cert),       # PACHACÁMAC, {{fecha}}
         }
 
         try:
