@@ -10,9 +10,9 @@ from utils import fecha_larga, safe_filename_pretty  # función común en utils.
 
 
 def run_modulo_anuncios():
-    st.header("📢 Anuncios Publicitarios – Evaluación")
+    st.header("📢 Anuncios Publicitarios – Evaluación y Certificado")
 
-    # Rutas de plantillas (carpeta en la RAÍZ del proyecto)
+    # ========= Rutas de plantillas (carpeta en la RAÍZ del proyecto) =========
     TEMPLATES_EVAL = {
         "PANEL SIMPLE - AZOTEAS": "plantillas_publicidad/evaluacion_panel_simple_azotea.docx",
         "LETRAS RECORTADAS": "plantillas_publicidad/evaluacion_letras_recortadas.docx",
@@ -21,12 +21,25 @@ def run_modulo_anuncios():
         "PANEL SENCILLO Y LUMINOSO": "plantillas_publicidad/evaluacion_panel_sencillo_luminoso.docx",
     }
 
+    # 👉 adapta estos nombres a tus archivos reales de certificado
+    TEMPLATES_CERT = {
+        "PANEL SIMPLE - AZOTEAS": "plantillas_publicidad/certificado_panel_simple_azotea.docx",
+        "LETRAS RECORTADAS": "plantillas_publicidad/certificado_letras_recortadas.docx",
+        "PANEL SIMPLE - ESTACIONES DE SERVICIO": "plantillas_publicidad/certificado_panel_simple_estacion.docx",
+        "TOLDO SENCILLO": "plantillas_publicidad/certificado_toldo_sencillo.docx",
+        "PANEL SENCILLO Y LUMINOSO": "plantillas_publicidad/certificado_panel_sencillo_luminoso.docx",
+    }
+
     tipo_anuncio = st.selectbox(
         "Tipo de anuncio publicitario",
         list(TEMPLATES_EVAL.keys())
     )
 
     st.markdown("---")
+
+    # -------------------------------------------------------------------------
+    #                    MÓDULO 1 · EVALUACIÓN
+    # -------------------------------------------------------------------------
 
     # Lógica de campos adicionales
     usa_grosor = tipo_anuncio in (
@@ -38,10 +51,9 @@ def run_modulo_anuncios():
     grosor = 0.0
     altura_extra = 0.0
 
-    # ---------- FORMULARIO ----------
     with st.form("form_evaluacion"):
 
-        # Datos del solicitante
+        # ---------------- Datos del solicitante ----------------
         st.subheader("Datos del solicitante")
         col1, col2 = st.columns(2)
         with col1:
@@ -50,7 +62,7 @@ def run_modulo_anuncios():
         with col2:
             ruc = st.text_input("RUC", max_chars=15)
 
-        # Datos del anuncio
+        # ---------------- Datos del anuncio ----------------
         st.subheader("Datos del anuncio")
 
         col3, col4 = st.columns(2)
@@ -76,7 +88,7 @@ def run_modulo_anuncios():
 
         ubicacion = st.text_input("Ubicación del anuncio", max_chars=200)
 
-        # Datos administrativos
+        # ---------------- Datos administrativos ----------------
         st.subheader("Datos administrativos")
         col6, col7, col8 = st.columns(3)
         with col6:
@@ -98,17 +110,17 @@ def run_modulo_anuncios():
                 step=1,
             )
 
-        generar = st.form_submit_button("Generar evaluación")
+        generar_eval = st.form_submit_button("Generar evaluación")
 
-    # ---------- GENERACIÓN DEL WORD ----------
-    if generar:
+    # ---------- GENERACIÓN DEL WORD (EVALUACIÓN) ----------
+    if generar_eval:
         if not nombre or not n_anuncio or not num_ds:
             st.error("Completa al menos: Solicitante, N° de anuncio y N° de expediente.")
         else:
             template_path = TEMPLATES_EVAL[tipo_anuncio]
             st.info(f"Usando plantilla: {template_path}")
 
-            contexto = {
+            contexto_eval = {
                 "n_anuncio": n_anuncio,
                 "nombre": nombre,
                 "ruc": ruc,
@@ -118,7 +130,7 @@ def run_modulo_anuncios():
                 "leyenda": leyenda,
                 "colores": colores,
                 "material": material,
-                "ubicacion": ubicacion,          # En Word: {{ubicación}}
+                "ubicacion": ubicacion,          # En Word: {{ubicacion}}
                 "num_cara": int(num_cara),
                 "num_ds": num_ds,
                 "fecha_ingreso": fecha_ingreso.strftime("%d/%m/%Y"),
@@ -129,9 +141,12 @@ def run_modulo_anuncios():
                 "altura": f"{altura_extra:.2f}" if usa_altura_extra else "",
             }
 
+            # guardamos datos para el certificado
+            st.session_state["anuncio_eval_ctx"] = contexto_eval
+
             try:
                 doc = DocxTemplate(template_path)
-                doc.render(contexto)
+                doc.render(contexto_eval)
 
                 buffer = BytesIO()
                 doc.save(buffer)
@@ -139,7 +154,6 @@ def run_modulo_anuncios():
 
                 base_name = f"EA {n_anuncio}_exp{num_ds}_{nombre.lower()}"
                 nombre_archivo = safe_filename_pretty(base_name) + ".docx"
-
 
                 st.success("Evaluación generada correctamente.")
                 st.download_button(
@@ -153,12 +167,157 @@ def run_modulo_anuncios():
                 )
 
             except jinja2.TemplateSyntaxError as e:
-                st.error("Hay un error de sintaxis en la plantilla Word.")
+                st.error("Hay un error de sintaxis en la plantilla de EVALUACIÓN.")
                 st.error(f"Plantilla: {template_path}")
                 st.error(f"Mensaje: {e.message}")
                 st.error(f"Línea aproximada en el XML: {e.lineno}")
             except Exception as e:
-                st.error(f"Ocurrió un error al generar el documento: {e}")
+                st.error(f"Ocurrió un error al generar el documento de evaluación: {e}")
+
+    # -------------------------------------------------------------------------
+    #                    MÓDULO 2 · CERTIFICADO
+    # -------------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("📜 Certificado de Anuncio Publicitario")
+
+    eval_ctx = st.session_state.get("anuncio_eval_ctx")
+
+    if not eval_ctx:
+        st.info("Primero genera la **Evaluación** para reutilizar sus datos en el Certificado.")
+        return
+
+    # Mostramos un pequeño resumen de datos reutilizados
+    with st.expander("Ver datos reutilizados de la Evaluación"):
+        st.write(
+            {
+                "N° anuncio": eval_ctx.get("n_anuncio"),
+                "Expediente / DS": eval_ctx.get("num_ds"),
+                "Nombre": eval_ctx.get("nombre"),
+                "Dirección": eval_ctx.get("direccion"),
+                "Ubicación": eval_ctx.get("ubicacion"),
+                "Leyenda": eval_ctx.get("leyenda"),
+                "Dimensiones": f"{eval_ctx.get('largo')} x {eval_ctx.get('alto')}",
+                "Grosor": eval_ctx.get("grosor"),
+                "Caras": eval_ctx.get("num_cara"),
+                "Colores": eval_ctx.get("colores"),
+                "Material": eval_ctx.get("material"),
+            }
+        )
+
+    with st.form("form_certificado"):
+        colc1, colc2 = st.columns(2)
+        with colc1:
+            n_certificado = st.text_input("N° de certificado", max_chars=20)
+        with colc2:
+            # la fecha del certificado (parte baja de la hoja)
+            fecha_cert = st.date_input("Fecha del certificado", value=date.today())
+
+        # Vigencia
+        vigencia_tipo = st.selectbox(
+            "Tipo de vigencia",
+            ["INDETERMINADA", "TEMPORAL"]
+        )
+
+        vig_ini = vig_fin = None
+        if vigencia_tipo == "TEMPORAL":
+            cv1, cv2 = st.columns(2)
+            with cv1:
+                vig_ini = st.date_input("Inicio de vigencia", value=date.today())
+            with cv2:
+                vig_fin = st.date_input("Fin de vigencia", value=date.today())
+
+        # Ordenanza
+        ordenanza = st.selectbox(
+            "Ordenanza aplicable",
+            ["2682-MML", "107-MDP/C"]
+        )
+
+        # Características físicas / técnicas
+        colf, colt = st.columns(2)
+        with colf:
+            fisico = st.selectbox(
+                "Características FÍSICAS",
+                ["TOLDO", "PANEL SIMPLE", "LETRAS RECORTADAS"]
+            )
+        with colt:
+            tecnico = st.selectbox(
+                "Características TÉCNICAS",
+                ["SENCILLO", "LUMINOSO", "ILUMINADO"]
+            )
+
+        generar_cert = st.form_submit_button("Generar certificado")
+
+    # ---------- GENERACIÓN DEL WORD (CERTIFICADO) ----------
+    if generar_cert:
+        if not n_certificado:
+            st.error("Completa el N° de certificado.")
+            return
+
+        if vigencia_tipo == "TEMPORAL":
+            if not vig_ini or not vig_fin:
+                st.error("Completa las fechas de inicio y fin de la vigencia.")
+                return
+            vigencia_txt = f"DEL {vig_ini.strftime('%d/%m/%Y')} AL {vig_fin.strftime('%d/%m/%Y')}"
+        else:
+            vigencia_txt = "INDETERMINADA"
+
+        cert_template_path = TEMPLATES_CERT.get(tipo_anuncio)
+        if not cert_template_path:
+            st.error("No se encontró plantilla de certificado para este tipo de anuncio.")
+            return
+
+        contexto_cert = {
+            "n_certificado": n_certificado,
+            "num_ds": eval_ctx.get("num_ds", ""),
+            "vigencia": vigencia_txt,
+            "ordenanza": ordenanza,
+
+            "nombre": eval_ctx.get("nombre", ""),
+            "direccion": eval_ctx.get("direccion", ""),
+            "ubicacion": eval_ctx.get("ubicacion", ""),
+            "leyenda": eval_ctx.get("leyenda", ""),
+
+            "largo": eval_ctx.get("largo", ""),
+            "alto": eval_ctx.get("alto", ""),
+            "grosor": eval_ctx.get("grosor", ""),
+            "color": eval_ctx.get("colores", ""),
+            "material": eval_ctx.get("material", ""),
+            "num_cara": eval_ctx.get("num_cara", ""),
+
+            "fisico": fisico,
+            "tecnico": tecnico,
+            "fecha": fecha_larga(fecha_cert),   # PACHACÁMAC, {{fecha}}
+        }
+
+        try:
+            doc = DocxTemplate(cert_template_path)
+            doc.render(contexto_cert)
+
+            buffer = BytesIO()
+            doc.save(buffer)
+            buffer.seek(0)
+
+            base_name_cert = f"CA {n_certificado}_exp{eval_ctx.get('num_ds','')}_{str(eval_ctx.get('nombre','')).lower()}"
+            nombre_archivo_cert = safe_filename_pretty(base_name_cert) + ".docx"
+
+            st.success("Certificado generado correctamente.")
+            st.download_button(
+                label="⬇️ Descargar certificado en Word",
+                data=buffer,
+                file_name=nombre_archivo_cert,
+                mime=(
+                    "application/vnd.openxmlformats-"
+                    "officedocument.wordprocessingml.document"
+                ),
+            )
+
+        except jinja2.TemplateSyntaxError as e:
+            st.error("Hay un error de sintaxis en la plantilla de CERTIFICADO.")
+            st.error(f"Plantilla: {cert_template_path}")
+            st.error(f"Mensaje: {e.message}")
+            st.error(f"Línea aproximada en el XML: {e.lineno}")
+        except Exception as e:
+            st.error(f"Ocurrió un error al generar el certificado: {e}")
 
 
 # Permite correr SOLO este módulo si quieres:
