@@ -240,7 +240,7 @@ def run_modulo_anuncios():
         with colf:
             fisico = st.selectbox(
                 "Características FÍSICAS",
-                ["TOLDO", "PANEL SIMPLE", "LETRAS RECORTADAS"]
+                ["TOLDO", "PANEL SIMPLE", "LETRAS RECORTADAS", "BANDEROLA"]
             )
         with colt:
             tecnico = st.selectbox(
