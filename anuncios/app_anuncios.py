@@ -221,13 +221,6 @@ def run_modulo_anuncios():
             ["INDETERMINADA", "TEMPORAL"]
         )
 
-        vig_ini = vig_fin = None
-        if vigencia_tipo == "TEMPORAL":
-            cv1, cv2 = st.columns(2)
-            with cv1:
-                vig_ini = st.date_input("Inicio de vigencia", value=date.today())
-            with cv2:
-                vig_fin = st.date_input("Fin de vigencia", value=date.today())
 
         # Ordenanza
         ordenanza = st.selectbox(
