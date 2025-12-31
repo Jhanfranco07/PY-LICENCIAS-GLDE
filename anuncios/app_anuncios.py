@@ -147,7 +147,8 @@ def run_modulo_anuncios():
 
             try:
                 doc = DocxTemplate(template_path)
-                doc.render(contexto_eval)
+                doc.render(contexto_eval, autoescape=True)
+
 
                 buffer = BytesIO()
                 doc.save(buffer)
@@ -294,13 +295,19 @@ def run_modulo_anuncios():
 
         try:
             doc = DocxTemplate(cert_template_path)
-            doc.render(contexto_cert)
+            doc.render(contexto_cert, autoescape=True)
+
 
             buffer = BytesIO()
             doc.save(buffer)
             buffer.seek(0)
 
-            base_name_cert = f"CA {n_certificado}_exp{eval_ctx.get('num_ds','')}_{str(eval_ctx.get('nombre','')).lower()}"
+            # Armamos el nombre del archivo como:
+# CERT 183_EXP 6127_MANCO JARA
+            num_ds_val = str(eval_ctx.get("num_ds", "")).strip()
+            nombre_val = str(eval_ctx.get("nombre", "")).strip().upper()
+
+            base_name_cert = f"CERT {n_certificado}_EXP {num_ds_val}_{nombre_val}"
             nombre_archivo_cert = safe_filename_pretty(base_name_cert) + ".docx"
 
             st.success("Certificado generado correctamente.")
