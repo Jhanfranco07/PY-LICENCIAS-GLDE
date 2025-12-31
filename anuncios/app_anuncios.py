@@ -44,7 +44,7 @@ def run_modulo_anuncios():
     usa_grosor = tipo_anuncio in (
         "PANEL SENCILLO Y LUMINOSO",
         "LETRAS RECORTADAS",
-        "TOLDO SENCILLO",           # 🔹 agregado
+        "TOLDO SENCILLO",
     )
     # Este tipo usa ALTURA (soporte) extra
     usa_altura_extra = tipo_anuncio == "PANEL SIMPLE - AZOTEAS"
@@ -149,7 +149,6 @@ def run_modulo_anuncios():
                 doc = DocxTemplate(template_path)
                 doc.render(contexto_eval, autoescape=True)
 
-
                 buffer = BytesIO()
                 doc.save(buffer)
                 buffer.seek(0)
@@ -221,6 +220,15 @@ def run_modulo_anuncios():
             ["INDETERMINADA", "TEMPORAL"]
         )
 
+        meses_vigencia = 0
+        if vigencia_tipo == "TEMPORAL":
+            meses_vigencia = st.number_input(
+                "Meses de vigencia",
+                min_value=1,
+                max_value=60,
+                step=1,
+                value=1,
+            )
 
         # Ordenanza
         ordenanza = st.selectbox(
@@ -250,10 +258,7 @@ def run_modulo_anuncios():
             return
 
         if vigencia_tipo == "TEMPORAL":
-            if not vig_ini or not vig_fin:
-                st.error("Completa las fechas de inicio y fin de la vigencia.")
-                return
-            vigencia_txt = f"DEL {vig_ini.strftime('%d/%m/%Y')} AL {vig_fin.strftime('%d/%m/%Y')}"
+            vigencia_txt = f"TEMPORAL ({int(meses_vigencia)}) MESES"
         else:
             vigencia_txt = "INDETERMINADA"
 
@@ -290,13 +295,11 @@ def run_modulo_anuncios():
             doc = DocxTemplate(cert_template_path)
             doc.render(contexto_cert, autoescape=True)
 
-
             buffer = BytesIO()
             doc.save(buffer)
             buffer.seek(0)
 
-            # Armamos el nombre del archivo como:
-# CERT 183_EXP 6127_MANCO JARA
+            # Nombre del archivo: CERT 183_EXP 6127_MANCO JARA
             num_ds_val = str(eval_ctx.get("num_ds", "")).strip()
             nombre_val = str(eval_ctx.get("nombre", "")).strip().upper()
 
