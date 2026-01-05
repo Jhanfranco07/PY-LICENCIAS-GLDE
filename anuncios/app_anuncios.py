@@ -56,10 +56,30 @@ def run_modulo_anuncios():
 
         # ---------------- Datos del solicitante ----------------
         st.subheader("Datos del solicitante")
+
+        # Tipo de contribuyente / RUC 10 vs RUC 20
+        tipo_ruc_label = st.radio(
+            "Tipo de contribuyente",
+            ["RUC 10 – Persona natural", "RUC 20 – Persona jurídica"],
+            index=0,
+            horizontal=True,
+        )
+        tipo_ruc = "10" if tipo_ruc_label.startswith("RUC 10") else "20"
+
         col1, col2 = st.columns(2)
         with col1:
             nombre = st.text_input("Solicitante (nombre completo)", max_chars=150)
+            # Si es RUC 20, pedimos también el representante legal (solo para Excel luego)
+            if tipo_ruc == "20":
+                representante = st.text_input(
+                    "Representante legal (solo RUC 20)",
+                    max_chars=150,
+                    placeholder="Nombre completo del representante"
+                )
+            else:
+                representante = ""
             direccion = st.text_input("Dirección del solicitante", max_chars=200)
+
         with col2:
             ruc = st.text_input("RUC", max_chars=15)
 
@@ -140,9 +160,13 @@ def run_modulo_anuncios():
                 "tipo_anuncio": tipo_anuncio,
                 "grosor": f"{grosor:.2f}" if usa_grosor else "",
                 "altura": f"{altura_extra:.2f}" if usa_altura_extra else "",
+                # Campos extra solo para registro / Excel (no usados en Word)
+                "tipo_ruc": tipo_ruc,                 # "10" o "20"
+                "tipo_ruc_label": tipo_ruc_label,     # texto completo del radio
+                "representante": representante,       # solo si RUC 20
             }
 
-            # guardamos datos para el certificado
+            # guardamos datos para el certificado y, luego, para Excel
             st.session_state["anuncio_eval_ctx"] = contexto_eval
 
             try:
@@ -193,7 +217,9 @@ def run_modulo_anuncios():
             {
                 "N° anuncio": eval_ctx.get("n_anuncio"),
                 "Expediente / DS": eval_ctx.get("num_ds"),
-                "Nombre": eval_ctx.get("nombre"),
+                "Nombre / Razón social": eval_ctx.get("nombre"),
+                "Tipo de RUC": eval_ctx.get("tipo_ruc_label"),
+                "Representante (si RUC 20)": eval_ctx.get("representante"),
                 "Dirección": eval_ctx.get("direccion"),
                 "Ubicación": eval_ctx.get("ubicacion"),
                 "Leyenda": eval_ctx.get("leyenda"),
