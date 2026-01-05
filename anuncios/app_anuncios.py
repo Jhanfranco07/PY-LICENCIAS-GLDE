@@ -63,59 +63,82 @@ def run_modulo_anuncios():
             ["RUC 10 – Persona natural", "RUC 20 – Persona jurídica"],
             index=0,
             horizontal=True,
+            key="tipo_ruc_radio",
         )
-        tipo_ruc = "10" if tipo_ruc_label.startswith("RUC 10") else "20"
+        es_ruc20 = tipo_ruc_label.startswith("RUC 20")
+        tipo_ruc = "20" if es_ruc20 else "10"
 
         col1, col2 = st.columns(2)
         with col1:
-            nombre = st.text_input("Solicitante (nombre completo)", max_chars=150)
-            # Si es RUC 20, pedimos también el representante legal (solo para Excel luego)
-            if tipo_ruc == "20":
+            nombre = st.text_input(
+                "Solicitante (nombre completo)",
+                max_chars=150,
+                key="nombre_sol",
+            )
+
+            # SOLO aparece si es RUC 20
+            if es_ruc20:
                 representante = st.text_input(
                     "Representante legal (solo RUC 20)",
                     max_chars=150,
-                    placeholder="Nombre completo del representante"
+                    key="representante_sol",
+                    placeholder="Nombre completo del representante",
                 )
             else:
                 representante = ""
-            direccion = st.text_input("Dirección del solicitante", max_chars=200)
+
+            direccion = st.text_input(
+                "Dirección del solicitante",
+                max_chars=200,
+                key="direccion_sol",
+            )
 
         with col2:
-            ruc = st.text_input("RUC", max_chars=15)
+            ruc = st.text_input("RUC", max_chars=15, key="ruc_sol")
 
         # ---------------- Datos del anuncio ----------------
         st.subheader("Datos del anuncio")
 
         col3, col4 = st.columns(2)
         with col3:
-            largo = st.number_input("Largo (m)", min_value=0.0, step=0.10, format="%.2f")
+            largo = st.number_input(
+                "Largo (m)", min_value=0.0, step=0.10, format="%.2f", key="largo_an"
+            )
         with col4:
-            alto = st.number_input("Alto (m)", min_value=0.0, step=0.10, format="%.2f")
+            alto = st.number_input(
+                "Alto (m)", min_value=0.0, step=0.10, format="%.2f", key="alto_an"
+            )
 
         if usa_grosor:
-            grosor = st.number_input("Grosor (m)", min_value=0.0, step=0.01, format="%.2f")
+            grosor = st.number_input(
+                "Grosor (m)", min_value=0.0, step=0.01, format="%.2f", key="grosor_an"
+            )
         elif usa_altura_extra:
-            altura_extra = st.number_input("Altura (m)", min_value=0.0, step=0.10, format="%.2f")
+            altura_extra = st.number_input(
+                "Altura (m)", min_value=0.0, step=0.10, format="%.2f", key="altura_an"
+            )
 
-        num_cara = st.number_input("N° de caras", min_value=1, step=1)
+        num_cara = st.number_input("N° de caras", min_value=1, step=1, key="caras_an")
 
-        leyenda = st.text_area("Leyenda del anuncio", height=80)
+        leyenda = st.text_area("Leyenda del anuncio", height=80, key="leyenda_an")
 
         col_colores, col_material = st.columns(2)
         with col_colores:
-            colores = st.text_input("Colores principales")
+            colores = st.text_input("Colores principales", key="colores_an")
         with col_material:
-            material = st.text_input("Material")
+            material = st.text_input("Material", key="material_an")
 
-        ubicacion = st.text_input("Ubicación del anuncio", max_chars=200)
+        ubicacion = st.text_input(
+            "Ubicación del anuncio", max_chars=200, key="ubicacion_an"
+        )
 
         # ---------------- Datos administrativos ----------------
         st.subheader("Datos administrativos")
         col6, col7, col8 = st.columns(3)
         with col6:
-            n_anuncio = st.text_input("N° de anuncio (ej. 001)")
+            n_anuncio = st.text_input("N° de anuncio (ej. 001)", key="n_anuncio")
         with col7:
-            num_ds = st.text_input("N° de expediente / DS (ej. 1234)")
+            num_ds = st.text_input("N° de expediente / DS (ej. 1234)", key="num_ds")
         with col8:
             fecha_ingreso = st.date_input("Fecha de ingreso", value=date.today())
 
@@ -129,6 +152,7 @@ def run_modulo_anuncios():
                 max_value=2100,
                 value=date.today().year,
                 step=1,
+                key="anio_an",
             )
 
         generar_eval = st.form_submit_button("Generar evaluación")
@@ -160,13 +184,13 @@ def run_modulo_anuncios():
                 "tipo_anuncio": tipo_anuncio,
                 "grosor": f"{grosor:.2f}" if usa_grosor else "",
                 "altura": f"{altura_extra:.2f}" if usa_altura_extra else "",
-                # Campos extra solo para registro / Excel (no usados en Word)
-                "tipo_ruc": tipo_ruc,                 # "10" o "20"
-                "tipo_ruc_label": tipo_ruc_label,     # texto completo del radio
-                "representante": representante,       # solo si RUC 20
+                # Extra solo para registro / Excel
+                "tipo_ruc": tipo_ruc,               # "10" o "20"
+                "tipo_ruc_label": tipo_ruc_label,   # texto del radio
+                "representante": representante,     # solo si RUC 20
             }
 
-            # guardamos datos para el certificado y, luego, para Excel
+            # guardamos datos para el certificado y luego para Excel
             st.session_state["anuncio_eval_ctx"] = contexto_eval
 
             try:
@@ -211,7 +235,7 @@ def run_modulo_anuncios():
         st.info("Primero genera la **Evaluación** para reutilizar sus datos en el Certificado.")
         return
 
-    # Mostramos un pequeño resumen de datos reutilizados
+    # Resumen
     with st.expander("Ver datos reutilizados de la Evaluación"):
         st.write(
             {
@@ -237,7 +261,6 @@ def run_modulo_anuncios():
         with colc1:
             n_certificado = st.text_input("N° de certificado", max_chars=20)
         with colc2:
-            # la fecha del certificado (parte baja de la hoja)
             fecha_cert = st.date_input("Fecha del certificado", value=date.today())
 
         # Vigencia
@@ -306,15 +329,15 @@ def run_modulo_anuncios():
 
             "largo": eval_ctx.get("largo", ""),
             "alto": eval_ctx.get("alto", ""),
-            "grosor": eval_ctx.get("grosor", ""),   # usado por letras/panel luminoso/toldo
-            "altura": eval_ctx.get("altura", ""),   # usado por panel azotea (SOPORTE)
+            "grosor": eval_ctx.get("grosor", ""),
+            "altura": eval_ctx.get("altura", ""),
             "color": eval_ctx.get("colores", ""),
             "material": eval_ctx.get("material", ""),
             "num_cara": eval_ctx.get("num_cara", ""),
 
             "fisico": fisico,
             "tecnico": tecnico,
-            "fecha": fecha_larga(fecha_cert),       # PACHACÁMAC, {{fecha}}
+            "fecha": fecha_larga(fecha_cert),
         }
 
         try:
@@ -325,7 +348,6 @@ def run_modulo_anuncios():
             doc.save(buffer)
             buffer.seek(0)
 
-            # Nombre del archivo: CERT 183_EXP 6127_MANCO JARA
             num_ds_val = str(eval_ctx.get("num_ds", "")).strip()
             nombre_val = str(eval_ctx.get("nombre", "")).strip().upper()
 
@@ -352,7 +374,6 @@ def run_modulo_anuncios():
             st.error(f"Ocurrió un error al generar el certificado: {e}")
 
 
-# Permite correr SOLO este módulo si quieres:
 if __name__ == "__main__":
     st.set_page_config(page_title="Anuncios Publicitarios", layout="centered")
     run_modulo_anuncios()
