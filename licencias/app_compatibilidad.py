@@ -1,6 +1,7 @@
 # licencias/app_compatibilidad.py
 
 import io
+import os
 from datetime import date
 
 import streamlit as st
@@ -13,13 +14,52 @@ from utils import (
     to_upper,
 )
 
-# -------------------------------------------------------------------
-# Helpers
-# -------------------------------------------------------------------
+# -------------------- Catálogos --------------------
+
+ZONAS = [
+    ("RDM",   "Residencial de Densidad Media"),
+    ("RDM-1", "Residencial de Densidad Media - 1"),
+    ("RDM-e", "Residencial de Densidad Media Especial"),
+    ("RDB",   "Residencial de Densidad Baja"),
+    ("CZ",    "Comercio Zonal"),
+    ("CV",    "Comercio Vecinal"),
+    ("E1",    "Educación Básica"),
+    ("E2",    "Educación Superior Tecnológica"),
+    ("E3",    "Educación Superior Universitaria"),
+    ("PTP",   "Protección y Tratamiento Paisajista"),
+    ("ZRP",   "Zona de Recreación Pública"),
+    ("ZRE",   "Zona de Reglamentación Especial"),
+    ("ZTE",   "Zona de Tratamiento Especial"),
+    ("ZTE 1", "Zona de Tratamiento Especial 1"),
+    ("ZTE 2", "Zona de Tratamiento Especial 2"),
+    ("CH",    "Casa Huerta"),
+    ("CH-1",  "Casa Huerta 1"),
+    ("CH-2",  "Casa Huerta 2"),
+    ("CH-3",  "Casa Huerta 3"),
+    ("OU",    "Otros Usos"),
+    ("OU-C",  "Otros Usos - Cementerio"),
+    ("OU-ZA", "Otros Usos - Zona Arqueológica"),
+    ("H2",    "Centro de Salud"),
+    ("H3",    "Hospital General"),
+    ("A",     "Agrícola"),
+    ("I2",    "Industria Liviana"),
+    ("I4",    "Industria Pesada Básica"),
+]
+ZONAS_DICT = {c: d for c, d in ZONAS}
+
+ORDENANZAS = [
+    "ORD. 1117-MML",
+    "ORD. 1146-MML",
+    "ORD. 2236-MML",
+    "ORD. 933-MML",
+    "ORD. 270-2021-PACHACAMAC",
+]
+
+
+# -------------------- Helpers --------------------
+
 def fecha_mes_abrev(d: date) -> str:
-    """
-    Devuelve: 16 DIC 2025 (para el paréntesis del EXPEDIENTE).
-    """
+    """Ej: 16 DIC 2025 (para el paréntesis del expediente)."""
     if not d:
         return ""
     meses = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN",
@@ -60,15 +100,16 @@ def render_doc(context: dict, filename_stem: str, plantilla_path: str):
     )
 
 
-# -------------------------------------------------------------------
-# Módulo principal
-# -------------------------------------------------------------------
+# -------------------- Módulo principal --------------------
+
 def run_modulo_compatibilidad():
     st.header("🏢 Evaluación de Compatibilidad de Uso")
 
     asegurar_dirs()
+    # carpeta específica para estas plantillas
+    os.makedirs("plantilla_compa", exist_ok=True)
 
-    # Rutas de las 2 plantillas
+    # rutas que me indicas
     TPL_COMP_INDETERMINADA = "plantilla_compa/compatibilidad_indeterminada.docx"
     TPL_COMP_TEMPORAL = "plantilla_compa/compatibilidad_temporal.docx"
 
@@ -84,35 +125,10 @@ def run_modulo_compatibilidad():
         unsafe_allow_html=True,
     )
 
-    # Subir / actualizar plantillas
-    with st.expander("📎 Subir / actualizar plantillas .docx"):
-        c1, c2 = st.columns(2)
-        with c1:
-            up_ind = st.file_uploader(
-                "Compatibilidad – INDETERMINADA",
-                type=["docx"],
-                key="upl_comp_ind",
-            )
-            if up_ind:
-                with open(TPL_COMP_INDETERMINADA, "wb") as f:
-                    f.write(up_ind.read())
-                st.success("Plantilla INDETERMINADA actualizada.")
-        with c2:
-            up_temp = st.file_uploader(
-                "Compatibilidad – TEMPORAL (01 AÑO)",
-                type=["docx"],
-                key="upl_comp_temp",
-            )
-            if up_temp:
-                with open(TPL_COMP_TEMPORAL, "wb") as f:
-                    f.write(up_temp.read())
-                st.success("Plantilla TEMPORAL actualizada.")
-
-    # ------------------------ FORMULARIO ------------------------
     with st.form("form_compatibilidad"):
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
-        # Encabezado: N° {{n_compa}}-2026-MDP-GLDE (el -2026 lo pones tú en la plantilla)
+        # Encabezado: en Word será N° {{n_compa}}-2026-MDP-GLDE
         n_compa = st.text_input(
             "N° de compatibilidad*",
             max_chars=10,
@@ -133,14 +149,11 @@ def run_modulo_compatibilidad():
         st.subheader("Datos de la actividad")
         giro = st.text_area("Uso comercial / giro*", height=60)
 
-        # Ordenanza (combo)
-        ordenanza = st.selectbox(
-            "Ordenanza*",
-            [
-                "ORDENANZA MUNICIPAL N° 2236-MML, ORD. 933-MML, ORD. 270-2021-PACHACAMAC",
-                "ORD. MUNIC. N° 2236-MML, ORD. 933-MML",
-                "ORD. MUNIC. N° 2236-MML, ORD. 933-MML, OTRA ORDENANZA",
-            ],
+        # Ordenanzas (múltiple selección)
+        ordenanzas_sel = st.multiselect(
+            "Ordenanzas aplicables*",
+            ORDENANZAS,
+            default=["ORD. 2236-MML"],
         )
 
         area = st.text_input("Área comercial (m²)*", max_chars=50)
@@ -176,10 +189,10 @@ def run_modulo_compatibilidad():
         actividad = st.text_input("Actividad general*", max_chars=200)
         codigo = st.text_input("Código de la actividad*", max_chars=50)
 
-        zona = st.selectbox(
-            "Zonificación (código)*",
-            ["RDM", "CV", "CZ", "CZ1", "CZ2", "CZ3"],
-        )
+        zona_opciones = [f"{c} – {d}" for c, d in ZONAS]
+        zona_sel = st.selectbox("Zonificación (código)*", zona_opciones)
+        zona_codigo = zona_sel.split(" – ")[0]
+        zona_desc = ZONAS_DICT.get(zona_codigo, "")
 
         conformidad = st.selectbox("Conformidad*", ["SI", "NO"])
 
@@ -200,29 +213,30 @@ def run_modulo_compatibilidad():
 
         generar = st.form_submit_button("🧾 Generar compatibilidad (.docx)")
 
-    # ------------------- PROCESAMIENTO -------------------
     if not generar:
         return
 
+    # --------- Validaciones básicas ---------
     faltantes = []
     for key, val in {
         "n_compa": n_compa,
         "persona": persona,
         "direccion": direccion,
         "giro": giro,
-        "ordenanza": ordenanza,
         "area": area,
         "itse": itse,
         "certificador": certificador,
         "tipo_licencia": tipo_licencia,
         "actividad": actividad,
         "codigo": codigo,
-        "zona": zona,
+        "zona": zona_codigo,
         "ds": ds,
     }.items():
         if isinstance(val, str) and not val.strip():
             faltantes.append(key)
 
+    if not ordenanzas_sel:
+        faltantes.append("ordenanzas")
     if not fecha_ds:
         faltantes.append("fecha_ds")
     if not fecha_doc:
@@ -232,7 +246,7 @@ def run_modulo_compatibilidad():
         st.error("Faltan campos obligatorios: " + ", ".join(faltantes))
         return
 
-    # DNI / RUC
+    # DNI / RUC con “--------------------” cuando falte
     dni_val = dni.strip()
     ruc_val = ruc.strip()
     if dni_val and not ruc_val:
@@ -243,44 +257,52 @@ def run_modulo_compatibilidad():
         dni_val = "--------------------"
         ruc_val = "--------------------"
 
-    # Nombre comercial vacío -> “--------------------”
+    # Nombre comercial vacío
     nom_com_val = nom_comercio.strip() or "--------------------"
 
-    # Conformidad -> X en SI / NO
+    # X en SI / NO
     conf_si = "X" if conformidad == "SI" else ""
     conf_no = "X" if conformidad == "NO" else ""
 
+    ordenanza_texto = ", ".join(ordenanzas_sel)
+
     ctx = {
-        "n_compa": n_compa,                     # <-- solo número, el “-2026” va en la plantilla
+        "n_compa": n_compa,                     # N° {{n_compa}}-2026-MDP-GLDE
         "persona": to_upper(persona),
         "dni": dni_val,
         "ruc": ruc_val,
         "nom_comercio": to_upper(nom_com_val),
         "direccion": to_upper(direccion),
         "giro": to_upper(giro),
-        "ordenanza": ordenanza,
+
+        "ordenanza": ordenanza_texto,
         "area": area,
         "itse": itse,
         "certificador": certificador,
         "tipo_licencia": tipo_licencia,
+
         "actividad": to_upper(actividad),
         "codigo": codigo,
-        "zona": zona,
+
+        "zona": zona_codigo,
+        "zona_desc": zona_desc,
+
         "ds": ds,
         "fecha_ds": fecha_mes_abrev(fecha_ds),
         "fecha_actual": fmt_fecha_larga(fecha_doc),
+
         "conf_si": conf_si,
         "conf_no": conf_no,
     }
 
-    # Elegir plantilla según el tipo de licencia
+    # Elegir plantilla según tipo de licencia
     if "INDETERMINADA" in tipo_licencia:
         tpl_path = TPL_COMP_INDETERMINADA
     else:
         tpl_path = TPL_COMP_TEMPORAL
 
-    # Nombre del archivo: ECU 1010_SAYAS RIVERA...
-    base_name = f"ECU {n_compa}_{to_upper(persona)}"
+    # Nombre del archivo: {{n_compa}} - 2026 - {{persona}}
+    base_name = f"{n_compa} - 2026 - {to_upper(persona)}"
     render_doc(ctx, base_name, tpl_path)
 
 
