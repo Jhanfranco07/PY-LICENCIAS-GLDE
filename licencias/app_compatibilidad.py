@@ -201,11 +201,11 @@ def run_modulo_compatibilidad():
 
         ds = st.text_input("N° de expediente / DS*", max_chars=20)
         fecha_ds = st.date_input(
-            "Fecha del expediente (para el paréntesis)",
+            "Fecha del expediente",
             value=date.today(),
         )
         fecha_doc = st.date_input(
-            "Fecha del documento (Pachacamac, ...)",
+            "Fecha del documento",
             value=date.today(),
         )
 
