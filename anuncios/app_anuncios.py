@@ -52,21 +52,21 @@ def run_modulo_anuncios():
     grosor = 0.0
     altura_extra = 0.0
 
+    # ---------------- Datos del solicitante (radio fuera del form) -----------
+    st.subheader("Datos del solicitante")
+
+    tipo_ruc_label = st.radio(
+        "Tipo de contribuyente",
+        ["RUC 10 – Persona natural", "RUC 20 – Persona jurídica"],
+        index=0,
+        horizontal=True,
+        key="tipo_ruc_radio",
+    )
+    es_ruc20 = tipo_ruc_label.startswith("RUC 20")
+    tipo_ruc = "20" if es_ruc20 else "10"
+
+    # ---------------- FORMULARIO DE EVALUACIÓN -------------------------------
     with st.form("form_evaluacion"):
-
-        # ---------------- Datos del solicitante ----------------
-        st.subheader("Datos del solicitante")
-
-        # Tipo de contribuyente / RUC 10 vs RUC 20
-        tipo_ruc_label = st.radio(
-            "Tipo de contribuyente",
-            ["RUC 10 – Persona natural", "RUC 20 – Persona jurídica"],
-            index=0,
-            horizontal=True,
-            key="tipo_ruc_radio",
-        )
-        es_ruc20 = tipo_ruc_label.startswith("RUC 20")
-        tipo_ruc = "20" if es_ruc20 else "10"
 
         col1, col2 = st.columns(2)
         with col1:
@@ -179,7 +179,7 @@ def run_modulo_anuncios():
                 "num_cara": int(num_cara),
                 "num_ds": num_ds,
                 "fecha_ingreso": fecha_ingreso.strftime("%d/%m/%Y"),
-                "fecha": fecha_larga(fecha),     # Fecha larga tipo: 2 de diciembre de 2025
+                "fecha": fecha_larga(fecha),     # Fecha larga
                 "anio": anio,
                 "tipo_anuncio": tipo_anuncio,
                 "grosor": f"{grosor:.2f}" if usa_grosor else "",
