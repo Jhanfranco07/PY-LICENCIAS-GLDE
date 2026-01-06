@@ -398,207 +398,193 @@ def run_modulo_anuncios():
 
     eval_ctx = st.session_state.get("anuncio_eval_ctx")
 
-    if not eval_ctx:
-        st.info("Primero genera la **Evaluación** para reutilizar sus datos en el Certificado.")
-        return
+    if eval_ctx:
+        # Resumen
+        with st.expander("Ver datos reutilizados de la Evaluación"):
+            st.write(
+                {
+                    "N° anuncio": eval_ctx.get("n_anuncio"),
+                    "Expediente / DS": eval_ctx.get("num_ds"),
+                    "Nombre / Razón social": eval_ctx.get("nombre"),
+                    "Tipo de RUC": eval_ctx.get("tipo_ruc_label"),
+                    "Representante (si RUC 20)": eval_ctx.get("representante"),
+                    "Dirección": eval_ctx.get("direccion"),
+                    "Ubicación": eval_ctx.get("ubicacion"),
+                    "Leyenda": eval_ctx.get("leyenda"),
+                    "Dimensiones": f"{eval_ctx.get('largo')} x {eval_ctx.get('alto')}",
+                    "Grosor": eval_ctx.get("grosor"),
+                    "Altura (soporte)": eval_ctx.get("altura"),
+                    "Caras": eval_ctx.get("num_cara"),
+                    "Colores": eval_ctx.get("colores"),
+                    "Material": eval_ctx.get("material"),
+                }
+            )
 
-    # Resumen
-    with st.expander("Ver datos reutilizados de la Evaluación"):
-        st.write(
-            {
-                "N° anuncio": eval_ctx.get("n_anuncio"),
-                "Expediente / DS": eval_ctx.get("num_ds"),
-                "Nombre / Razón social": eval_ctx.get("nombre"),
-                "Tipo de RUC": eval_ctx.get("tipo_ruc_label"),
-                "Representante (si RUC 20)": eval_ctx.get("representante"),
-                "Dirección": eval_ctx.get("direccion"),
-                "Ubicación": eval_ctx.get("ubicacion"),
-                "Leyenda": eval_ctx.get("leyenda"),
-                "Dimensiones": f"{eval_ctx.get('largo')} x {eval_ctx.get('alto')}",
-                "Grosor": eval_ctx.get("grosor"),
-                "Altura (soporte)": eval_ctx.get("altura"),
-                "Caras": eval_ctx.get("num_cara"),
-                "Colores": eval_ctx.get("colores"),
-                "Material": eval_ctx.get("material"),
-            }
-        )
+        with st.form("form_certificado"):
+            colc1, colc2 = st.columns(2)
+            with colc1:
+                n_certificado = st.text_input("N° de certificado", max_chars=20)
+            with colc2:
+                fecha_cert = st.date_input("Fecha del certificado", value=date.today())
 
-    with st.form("form_certificado"):
-        colc1, colc2 = st.columns(2)
-        with colc1:
-            n_certificado = st.text_input("N° de certificado", max_chars=20)
-        with colc2:
-            fecha_cert = st.date_input("Fecha del certificado", value=date.today())
+            # Vigencia
+            vigencia_tipo = st.selectbox(
+                "Tipo de vigencia",
+                ["INDETERMINADA", "TEMPORAL"]
+            )
 
-        # Vigencia
-        vigencia_tipo = st.selectbox(
-            "Tipo de vigencia",
-            ["INDETERMINADA", "TEMPORAL"]
-        )
+            meses_vigencia = 0
+            if vigencia_tipo == "TEMPORAL":
+                meses_vigencia = st.number_input(
+                    "Meses de vigencia",
+                    min_value=1,
+                    max_value=60,
+                    step=1,
+                    value=1,
+                )
 
+            # Ordenanza
+            ordenanza = st.selectbox(
+                "Ordenanza aplicable",
+                ["2682-MML", "107-MDP/C"]
+            )
+
+            # Características físicas / técnicas
+            colf, colt = st.columns(2)
+            with colf:
+                fisico = st.selectbox(
+                    "Características FÍSICAS",
+                    ["TOLDO", "PANEL SIMPLE", "LETRAS RECORTADAS", "BANDEROLA"]
+                )
+            with colt:
+                tecnico = st.selectbox(
+                    "Características TÉCNICAS",
+                    ["SENCILLO", "LUMINOSO", "ILUMINADO"]
+                )
+
+            st.markdown("### Datos para BD Excel (opcional)")
+            col_doc1, col_doc2, col_rec = st.columns(3)
+            with col_doc1:
+                doc_tipo = st.selectbox(
+                    "Tipo de documento del solicitante",
+                    ["DNI", "CARNET DE EXTRANJERIA"],
+                    key="doc_tipo",
+                )
+            with col_doc2:
+                doc_num = st.text_input(
+                    "N° documento del solicitante",
+                    max_chars=20,
+                    key="doc_num",
+                )
+            with col_rec:
+                num_recibo = st.text_input(
+                    "N° de recibo (solo BD, opcional)",
+                    max_chars=30,
+                    key="num_recibo",
+                )
+
+            generar_cert = st.form_submit_button("Generar certificado")
+    else:
+        st.info("Primero genera la **Evaluación** para poder armar el certificado.")
+        generar_cert = False  # para que no explote más abajo
+        # inicializamos variables para que el código no reviente si alguien toca el botón por error
+        n_certificado = ""
+        fecha_cert = None
+        vigencia_tipo = "INDETERMINADA"
         meses_vigencia = 0
-        if vigencia_tipo == "TEMPORAL":
-            meses_vigencia = st.number_input(
-                "Meses de vigencia",
-                min_value=1,
-                max_value=60,
-                step=1,
-                value=1,
-            )
-
-        # Ordenanza
-        ordenanza = st.selectbox(
-            "Ordenanza aplicable",
-            ["2682-MML", "107-MDP/C"]
-        )
-
-        # Características físicas / técnicas
-        colf, colt = st.columns(2)
-        with colf:
-            fisico = st.selectbox(
-                "Características FÍSICAS",
-                ["TOLDO", "PANEL SIMPLE", "LETRAS RECORTADAS", "BANDEROLA"]
-            )
-        with colt:
-            tecnico = st.selectbox(
-                "Características TÉCNICAS",
-                ["SENCILLO", "LUMINOSO", "ILUMINADO"]
-            )
-
-        st.markdown("### Datos para BD Excel (opcional)")
-        col_doc1, col_doc2, col_rec = st.columns(3)
-        with col_doc1:
-            doc_tipo = st.selectbox(
-                "Tipo de documento del solicitante",
-                ["DNI", "CARNET DE EXTRANJERIA"],
-                key="doc_tipo",
-            )
-        with col_doc2:
-            doc_num = st.text_input(
-                "N° documento del solicitante",
-                max_chars=20,
-                key="doc_num",
-            )
-        with col_rec:
-            num_recibo = st.text_input(
-                "N° de recibo (solo BD, opcional)",
-                max_chars=30,
-                key="num_recibo",
-            )
-
-        generar_cert = st.form_submit_button("Generar certificado")
+        ordenanza = ""
+        fisico = ""
+        tecnico = ""
+        doc_tipo = "DNI"
+        doc_num = ""
+        num_recibo = ""
 
     # ---------- GENERACIÓN DEL WORD (CERTIFICADO) ----------
-    if generar_cert:
+    if generar_cert and eval_ctx:
         if not n_certificado:
             st.error("Completa el N° de certificado.")
-            return
-
-        if vigencia_tipo == "TEMPORAL":
-            vigencia_txt = f"TEMPORAL ({int(meses_vigencia)}) MESES"
         else:
-            vigencia_txt = "INDETERMINADA"
+            if vigencia_tipo == "TEMPORAL":
+                vigencia_txt = f"TEMPORAL ({int(meses_vigencia)}) MESES"
+            else:
+                vigencia_txt = "INDETERMINADA"
 
-        cert_template_path = TEMPLATES_CERT.get(tipo_anuncio)
-        if not cert_template_path:
-            st.error("No se encontró plantilla de certificado para este tipo de anuncio.")
-            return
+            cert_template_path = TEMPLATES_CERT.get(tipo_anuncio)
+            if not cert_template_path:
+                st.error("No se encontró plantilla de certificado para este tipo de anuncio.")
+            else:
+                contexto_cert = {
+                    "n_certificado": n_certificado,
+                    "num_ds": eval_ctx.get("num_ds", ""),
+                    "vigencia": vigencia_txt,
+                    "ordenanza": ordenanza,
 
-        contexto_cert = {
-            "n_certificado": n_certificado,
-            "num_ds": eval_ctx.get("num_ds", ""),
-            "vigencia": vigencia_txt,
-            "ordenanza": ordenanza,
+                    "nombre": eval_ctx.get("nombre", ""),
+                    "direccion": eval_ctx.get("direccion", ""),
+                    "ubicacion": eval_ctx.get("ubicacion", ""),
+                    "leyenda": eval_ctx.get("leyenda", ""),
 
-            "nombre": eval_ctx.get("nombre", ""),
-            "direccion": eval_ctx.get("direccion", ""),
-            "ubicacion": eval_ctx.get("ubicacion", ""),
-            "leyenda": eval_ctx.get("leyenda", ""),
+                    "largo": eval_ctx.get("largo", ""),
+                    "alto": eval_ctx.get("alto", ""),
+                    "grosor": eval_ctx.get("grosor", ""),
+                    "altura": eval_ctx.get("altura", ""),
+                    "color": eval_ctx.get("colores", ""),
+                    "material": eval_ctx.get("material", ""),
+                    "num_cara": eval_ctx.get("num_cara", ""),
 
-            "largo": eval_ctx.get("largo", ""),
-            "alto": eval_ctx.get("alto", ""),
-            "grosor": eval_ctx.get("grosor", ""),
-            "altura": eval_ctx.get("altura", ""),
-            "color": eval_ctx.get("colores", ""),
-            "material": eval_ctx.get("material", ""),
-            "num_cara": eval_ctx.get("num_cara", ""),
+                    "fisico": fisico,
+                    "tecnico": tecnico,
+                    "fecha": fecha_larga(fecha_cert) if fecha_cert else "",
+                }
 
-            "fisico": fisico,
-            "tecnico": tecnico,
-            "fecha": fecha_larga(fecha_cert),
-        }
+                try:
+                    doc = DocxTemplate(cert_template_path)
+                    doc.render(contexto_cert, autoescape=True)
 
-        try:
-            doc = DocxTemplate(cert_template_path)
-            doc.render(contexto_cert, autoescape=True)
+                    buffer = BytesIO()
+                    doc.save(buffer)
+                    buffer.seek(0)
 
-            buffer = BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
+                    num_ds_val = str(eval_ctx.get("num_ds", "")).strip()
+                    nombre_val = str(eval_ctx.get("nombre", "")).strip().upper()
 
-            num_ds_val = str(eval_ctx.get("num_ds", "")).strip()
-            nombre_val = str(eval_ctx.get("nombre", "")).strip().upper()
+                    base_name_cert = f"CERT {n_certificado}_EXP {num_ds_val}_{nombre_val}"
+                    nombre_archivo_cert = safe_filename_pretty(base_name_cert) + ".docx"
 
-            base_name_cert = f"CERT {n_certificado}_EXP {num_ds_val}_{nombre_val}"
-            nombre_archivo_cert = safe_filename_pretty(base_name_cert) + ".docx"
+                    st.success("Certificado generado correctamente.")
+                    st.download_button(
+                        label="⬇️ Descargar certificado en Word",
+                        data=buffer,
+                        file_name=nombre_archivo_cert,
+                        mime=(
+                            "application/vnd.openxmlformats-"
+                            "officedocument.wordprocessingml.document"
+                        ),
+                    )
 
-            st.success("Certificado generado correctamente.")
-            st.download_button(
-                label="⬇️ Descargar certificado en Word",
-                data=buffer,
-                file_name=nombre_archivo_cert,
-                mime=(
-                    "application/vnd.openxmlformats-"
-                    "officedocument.wordprocessingml.document"
-                ),
-            )
+                    # Guardamos en sesión los datos necesarios para BD (pero NO lo escribimos aún)
+                    st.session_state["anuncio_ultimo_cert_eval"] = eval_ctx
+                    st.session_state["anuncio_ultimo_cert_meta"] = {
+                        "vigencia_txt": vigencia_txt,
+                        "n_certificado": n_certificado,
+                        "fecha_cert": fecha_cert,
+                        "fisico": fisico,
+                        "tecnico": tecnico,
+                        "doc_tipo": doc_tipo,
+                        "doc_num": doc_num,
+                        "num_recibo": num_recibo,
+                    }
 
-            # Guardamos en sesión los datos necesarios para BD (pero NO lo escribimos aún)
-            st.session_state["anuncio_ultimo_cert_eval"] = eval_ctx
-            st.session_state["anuncio_ultimo_cert_meta"] = {
-                "vigencia_txt": vigencia_txt,
-                "n_certificado": n_certificado,
-                "fecha_cert": fecha_cert,
-                "fisico": fisico,
-                "tecnico": tecnico,
-                "doc_tipo": doc_tipo,
-                "doc_num": doc_num,
-                "num_recibo": num_recibo,
-            }
-
-        except jinja2.TemplateSyntaxError as e:
-            st.error("Hay un error de sintaxis en la plantilla de CERTIFICADO.")
-            st.error(f"Plantilla: {cert_template_path}")
-            st.error(f"Mensaje: {e.message}")
-            st.error(f"Línea aproximada en el XML: {e.lineno}")
-        except Exception as e:
-            st.error(f"Ocurrió un error al generar el certificado: {e}")
-
-    # -------------------------------------------------------------------------
-    #     PRIMERO: VER / DESCARGAR BD (SIEMPRE DISPONIBLE SI EXISTE EL EXCEL)
-    # -------------------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("📊 Ver / descargar base de datos")
-
-    if os.path.exists(BD_EXCEL_PATH):
-        try:
-            df_bd = pd.read_excel(BD_EXCEL_PATH)
-            st.dataframe(df_bd, use_container_width=True)
-
-            with open(BD_EXCEL_PATH, "rb") as f:
-                st.download_button(
-                    "⬇️ Descargar Excel de certificados",
-                    data=f,
-                    file_name=os.path.basename(BD_EXCEL_PATH),
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-        except Exception as e:
-            st.error(f"No se pudo leer el Excel de BD: {e}")
-    else:
-        st.info("Aún no existe el archivo de base de datos. Guarda al menos un certificado para crearlo.")
+                except jinja2.TemplateSyntaxError as e:
+                    st.error("Hay un error de sintaxis en la plantilla de CERTIFICADO.")
+                    st.error(f"Plantilla: {cert_template_path}")
+                    st.error(f"Mensaje: {e.message}")
+                    st.error(f"Línea aproximada en el XML: {e.lineno}")
+                except Exception as e:
+                    st.error(f"Ocurrió un error al generar el certificado: {e}")
 
     # -------------------------------------------------------------------------
-    #      LUEGO: OPCIÓN PARA GUARDAR EL ÚLTIMO CERTIFICADO EN LA BD
+    #      OPCIÓN PARA GUARDAR EL ÚLTIMO CERTIFICADO EN LA BD
     # -------------------------------------------------------------------------
     st.markdown("---")
     st.subheader("📑 Registrar último certificado en BD Excel")
@@ -626,6 +612,30 @@ def run_modulo_anuncios():
                 st.success("Certificado registrado en la base de datos Excel.")
             except Exception as e:
                 st.error(f"Ocurrió un error al guardar en Excel: {e}")
+
+    # -------------------------------------------------------------------------
+    #     POR ÚLTIMO: VER / DESCARGAR BD (SIEMPRE QUE EXISTA EL EXCEL)
+    # -------------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("📊 Ver / descargar base de datos")
+
+    if os.path.exists(BD_EXCEL_PATH):
+        try:
+            df_bd = pd.read_excel(BD_EXCEL_PATH)
+            st.dataframe(df_bd, use_container_width=True)
+
+            with open(BD_EXCEL_PATH, "rb") as f:
+                st.download_button(
+                    "⬇️ Descargar Excel de certificados",
+                    data=f,
+                    file_name=os.path.basename(BD_EXCEL_PATH),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+        except Exception as e:
+            st.error(f"No se pudo leer el Excel de BD: {e}")
+    else:
+        st.info("Aún no existe el archivo de base de datos. "
+                "Cuando guardes un certificado, se creará automáticamente.")
 
 
 if __name__ == "__main__":
