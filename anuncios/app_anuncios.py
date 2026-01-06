@@ -11,7 +11,7 @@ import jinja2
 from utils import fecha_larga, safe_filename_pretty  # función común en utils.py
 
 # Ruta del Excel de base de datos de certificados
-# Si quieres usar el archivo oficial, puedes cambiar este nombre:
+# Puedes cambiar el nombre si quieres usar el archivo oficial:
 # BD_EXCEL_PATH = "BASE DE DATOS - CERTIFICADOS DE ANUNCIO.xlsx"
 BD_EXCEL_PATH = "BD_CERTIFICADOS_ANUNCIO.xlsx"
 
@@ -575,35 +575,10 @@ def run_modulo_anuncios():
             st.error(f"Ocurrió un error al generar el certificado: {e}")
 
     # -------------------------------------------------------------------------
-    #         BLOQUE: GUARDAR EN BD EXCEL + VER Y DESCARGAR
+    #     PRIMERO: VER / DESCARGAR BD (SIEMPRE DISPONIBLE SI EXISTE EL EXCEL)
     # -------------------------------------------------------------------------
     st.markdown("---")
-    st.subheader("📑 Registro en BD Excel de Certificados")
-
-    ult_eval = st.session_state.get("anuncio_ultimo_cert_eval")
-    ult_meta = st.session_state.get("anuncio_ultimo_cert_meta")
-
-    if not ult_eval or not ult_meta:
-        st.info("Genera un certificado para poder registrarlo en la base de datos Excel.")
-    else:
-        if st.button("💾 Guardar último certificado en BD Excel"):
-            try:
-                guardar_certificado_en_excel(
-                    ult_eval,
-                    ult_meta["vigencia_txt"],
-                    ult_meta["n_certificado"],
-                    ult_meta["fecha_cert"],
-                    ult_meta["fisico"],
-                    ult_meta["tecnico"],
-                    ult_meta["doc_tipo"],
-                    ult_meta["doc_num"],
-                    ult_meta["num_recibo"],
-                )
-                st.success("Certificado registrado en la base de datos Excel.")
-            except Exception as e:
-                st.error(f"Ocurrió un error al guardar en Excel: {e}")
-
-    st.markdown("### 📊 Ver / descargar base de datos")
+    st.subheader("📊 Ver / descargar base de datos")
 
     if os.path.exists(BD_EXCEL_PATH):
         try:
@@ -621,6 +596,36 @@ def run_modulo_anuncios():
             st.error(f"No se pudo leer el Excel de BD: {e}")
     else:
         st.info("Aún no existe el archivo de base de datos. Guarda al menos un certificado para crearlo.")
+
+    # -------------------------------------------------------------------------
+    #      LUEGO: OPCIÓN PARA GUARDAR EL ÚLTIMO CERTIFICADO EN LA BD
+    # -------------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("📑 Registrar último certificado en BD Excel")
+
+    ult_eval = st.session_state.get("anuncio_ultimo_cert_eval")
+    ult_meta = st.session_state.get("anuncio_ultimo_cert_meta")
+
+    if not ult_eval or not ult_meta:
+        st.info("Todavía no hay un certificado reciente para registrar en la BD. "
+                "Genera un certificado y luego podrás guardarlo aquí.")
+    else:
+        if st.button("💾 Guardar último certificado en BD Excel"):
+            try:
+                guardar_certificado_en_excel(
+                    ult_eval,
+                    ult_meta["vigencia_txt"],
+                    ult_meta["n_certificado"],
+                    ult_meta["fecha_cert"],
+                    ult_meta["fisico"],
+                    ult_meta["tecnico"],
+                    ult_meta["doc_tipo"],
+                    ult_meta["doc_num"],
+                    ult_meta["num_recibo"],
+                )
+                st.success("Certificado registrado en la base de datos Excel.")
+            except Exception as e:
+                st.error(f"Ocurrió un error al guardar en Excel: {e}")
 
 
 if __name__ == "__main__":
