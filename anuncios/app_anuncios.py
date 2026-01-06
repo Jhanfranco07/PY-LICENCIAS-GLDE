@@ -1,5 +1,7 @@
 # anuncios/app_anuncios.py
 
+import os
+import pandas as pd
 import streamlit as st
 from docxtpl import DocxTemplate
 from io import BytesIO
@@ -8,7 +10,178 @@ import jinja2
 
 from utils import fecha_larga, safe_filename_pretty  # función común en utils.py
 
+# -------------------------------------------------------------------
+# RUTA DEL EXCEL DE BASE DE DATOS DE CERTIFICADOS
+# -------------------------------------------------------------------
+# Si quieres usar el formato oficial, cambia el nombre aquí:
+# BD_EXCEL_PATH = "BASE DE DATOS - CERTIFICADOS DE ANUNCIO.xlsx"
+BD_EXCEL_PATH = "BD_CERTIFICADOS_ANUNCIO.xlsx"
 
+
+# -------------------------------------------------------------------
+# HELPERS PARA BD
+# -------------------------------------------------------------------
+def split_nombre_apellidos(nombre_raw: str):
+    """
+    Separa en:
+    - apellido paterno
+    - apellido materno
+    - nombres
+    usando una heurística simple basada en espacios.
+    """
+    if not nombre_raw:
+        return "", "", ""
+
+    partes = str(nombre_raw).strip().upper().split()
+    if len(partes) == 1:
+        return partes[0], "", ""
+    elif len(partes) == 2:
+        ape_pat = partes[0]
+        ape_mat = ""
+        nombres = partes[1]
+    else:
+        ape_pat = partes[0]
+        ape_mat = partes[1]
+        nombres = " ".join(partes[2:])
+    return ape_pat, ape_mat, nombres
+
+
+def guardar_certificado_en_excel(
+    eval_ctx,
+    vigencia_txt,
+    n_certificado,
+    fecha_cert,
+    fisico,
+    tecnico,
+    doc_tipo,
+    doc_num,
+    num_recibo,
+):
+    """
+    Construye una fila con el formato oficial y la agrega (o crea) el Excel.
+    """
+
+    # Nombre base para separar apellidos y nombres:
+    # - Si es RUC 20 usamos el REPRESENTANTE
+    # - Si es RUC 10 usamos el solicitante (nombre completo)
+    tipo_ruc = eval_ctx.get("tipo_ruc", "")
+    if tipo_ruc == "20" and eval_ctx.get("representante"):
+        nombre_persona = eval_ctx.get("representante", "")
+    else:
+        nombre_persona = eval_ctx.get("nombre", "")
+
+    ape_pat, ape_mat, nombres = split_nombre_apellidos(nombre_persona)
+
+    # Razón social = campo {{nombre}} (para RUC 20 será la empresa)
+    razon_social = str(eval_ctx.get("nombre", "")).strip().upper()
+
+    # Fechas en formato corto para Excel
+    fecha_emision_str = fecha_cert.strftime("%d/%m/%Y") if fecha_cert else ""
+
+    # FECHA DE EXPIRACIÓN DE LA AUTORIZACION = texto de {{vigencia}}
+    # -> "INDETERMINADA" o "TEMPORAL (X) MESES"
+    fecha_expiracion_str = vigencia_txt
+
+    # Campos comunes desde la evaluación
+    num_ds_val = str(eval_ctx.get("num_ds", "")).strip()
+    ruc_empresa = str(eval_ctx.get("ruc", "")).strip()
+    direccion = str(eval_ctx.get("direccion", "")).strip().upper()
+    ubicacion = str(eval_ctx.get("ubicacion", "")).strip().upper()
+    leyenda = str(eval_ctx.get("leyenda", "")).strip().upper()
+    tipo_anuncio = str(eval_ctx.get("tipo_anuncio", "")).strip().upper()
+    largo = eval_ctx.get("largo", "")
+    alto = eval_ctx.get("alto", "")
+    grosor = eval_ctx.get("grosor", "")
+    altura_soporte = eval_ctx.get("altura", "")
+    color = eval_ctx.get("colores", "")
+    material = eval_ctx.get("material", "")
+    num_caras = eval_ctx.get("num_cara", "")
+
+    # Columnas exactamente como en el formato oficial
+    columnas = [
+        "EXP",
+        "N° RECIBO",
+        "RUC DE LA EMPRESA",
+        "NÚMERO DE AUTORIZACION ",
+        "FECHA DE EMISIÓN DE LA AUTORIZACION",
+        "FECHA DE EXPIRACIÓN DE LA AUTORIZACION",
+        "TIPO DE DOCUMENTO DE IDENTIDAD DEL SOLICITANTE",
+        "NÚMERO DE DOCUMENTO DE IDENTIDAD DEL SOLICITANTE",
+        "APELLIDO PATERNO DEL SOLICITANTE",
+        "APELLIDO MATERNO DEL SOLICITANTE",
+        "NOMBRE DEL SOLICITANTE",
+        "RAZÓN SOCIAL DEL SOLICITANTE",
+        "CARACTERISTICA FISICA DEL PANEL",
+        "CARACTERISTICA TECNICA DEL PANEL",
+        "TIPO DE ANUNCIPO PUBLICITARIO (Móvil, paneles, banderolas, etc.)",
+        "DIRECCION",
+        "UBICACIÓN",
+        "LEYENDA",
+        "LARGO",
+        "ALTO",
+        "ANCHO",
+        "GROSOR",
+        "LONGUITUD DE SOPORTES",
+        "COLOR",
+        "MATERIAL",
+        "N° CARAS",
+    ]
+
+    nueva_fila = {
+        "EXP": num_ds_val,
+        "N° RECIBO": num_recibo,
+        "RUC DE LA EMPRESA": ruc_empresa,
+        "NÚMERO DE AUTORIZACION ": n_certificado,
+        "FECHA DE EMISIÓN DE LA AUTORIZACION": fecha_emision_str,
+        "FECHA DE EXPIRACIÓN DE LA AUTORIZACION": fecha_expiracion_str,
+        "TIPO DE DOCUMENTO DE IDENTIDAD DEL SOLICITANTE": doc_tipo,
+        "NÚMERO DE DOCUMENTO DE IDENTIDAD DEL SOLICITANTE": doc_num,
+        "APELLIDO PATERNO DEL SOLICITANTE": ape_pat,
+        "APELLIDO MATERNO DEL SOLICITANTE": ape_mat,
+        "NOMBRE DEL SOLICITANTE": nombres,
+        "RAZÓN SOCIAL DEL SOLICITANTE": razon_social,
+        "CARACTERISTICA FISICA DEL PANEL": fisico,
+        "CARACTERISTICA TECNICA DEL PANEL": tecnico,
+        "TIPO DE ANUNCIPO PUBLICITARIO (Móvil, paneles, banderolas, etc.)": tipo_anuncio,
+        "DIRECCION": direccion,
+        "UBICACIÓN": ubicacion,
+        "LEYENDA": leyenda,
+        "LARGO": largo,
+        "ALTO": alto,
+        "ANCHO": "",  # por ahora no lo capturamos en el formulario
+        "GROSOR": grosor,
+        "LONGUITUD DE SOPORTES": altura_soporte,
+        "COLOR": color,
+        "MATERIAL": material,
+        "N° CARAS": num_caras,
+    }
+
+    # Leemos o creamos el Excel
+    if os.path.exists(BD_EXCEL_PATH):
+        try:
+            df = pd.read_excel(BD_EXCEL_PATH)
+        except Exception:
+            df = pd.DataFrame(columns=columnas)
+    else:
+        df = pd.DataFrame(columns=columnas)
+
+    # Aseguramos que todas las columnas existan
+    for col in columnas:
+        if col not in df.columns:
+            df[col] = ""
+
+    # Agregamos la nueva fila
+    df = pd.concat([df, pd.DataFrame([nueva_fila])], ignore_index=True)
+
+    # Reordenamos columnas por si acaso
+    df = df[columnas]
+
+    df.to_excel(BD_EXCEL_PATH, index=False)
+
+
+# -------------------------------------------------------------------
+# APP PRINCIPAL: EVALUACIÓN + CERTIFICADO
+# -------------------------------------------------------------------
 def run_modulo_anuncios():
     st.header("📢 Anuncios Publicitarios – Evaluación y Certificado")
 
@@ -36,9 +209,7 @@ def run_modulo_anuncios():
 
     st.markdown("---")
 
-    # -------------------------------------------------------------------------
-    #                    MÓDULO 1 · EVALUACIÓN
-    # -------------------------------------------------------------------------
+    # ------------------------ MÓDULO 1 · EVALUACIÓN --------------------------
 
     # Estos tipos usan GROSOR en las dimensiones
     usa_grosor = tipo_anuncio in (
@@ -52,26 +223,26 @@ def run_modulo_anuncios():
     grosor = 0.0
     altura_extra = 0.0
 
-    # ---------------- Datos del solicitante (radio fuera del form) -----------
-    st.subheader("Datos del solicitante")
-
-    tipo_ruc_label = st.radio(
-        "Tipo de contribuyente",
-        ["RUC 10 – Persona natural", "RUC 20 – Persona jurídica"],
-        index=0,
-        horizontal=True,
-        key="tipo_ruc_radio",
-    )
-    es_ruc20 = tipo_ruc_label.startswith("RUC 20")
-    tipo_ruc = "20" if es_ruc20 else "10"
-
-    # ---------------- FORMULARIO DE EVALUACIÓN -------------------------------
     with st.form("form_evaluacion"):
+
+        # ---------------- Datos del solicitante ----------------
+        st.subheader("Datos del solicitante")
+
+        # Tipo de contribuyente / RUC 10 vs RUC 20
+        tipo_ruc_label = st.radio(
+            "Tipo de contribuyente",
+            ["RUC 10 – Persona natural", "RUC 20 – Persona jurídica"],
+            index=0,
+            horizontal=True,
+            key="tipo_ruc_radio",
+        )
+        es_ruc20 = tipo_ruc_label.startswith("RUC 20")
+        tipo_ruc = "20" if es_ruc20 else "10"
 
         col1, col2 = st.columns(2)
         with col1:
             nombre = st.text_input(
-                "Solicitante (nombre completo)",
+                "Solicitante (nombre completo o razón social)",
                 max_chars=150,
                 key="nombre_sol",
             )
@@ -179,7 +350,7 @@ def run_modulo_anuncios():
                 "num_cara": int(num_cara),
                 "num_ds": num_ds,
                 "fecha_ingreso": fecha_ingreso.strftime("%d/%m/%Y"),
-                "fecha": fecha_larga(fecha),     # Fecha larga
+                "fecha": fecha_larga(fecha),     # Fecha larga tipo: 2 de diciembre de 2025
                 "anio": anio,
                 "tipo_anuncio": tipo_anuncio,
                 "grosor": f"{grosor:.2f}" if usa_grosor else "",
@@ -263,6 +434,22 @@ def run_modulo_anuncios():
         with colc2:
             fecha_cert = st.date_input("Fecha del certificado", value=date.today())
 
+        # N° de recibo (solo BD)
+        num_recibo = st.text_input("N° de recibo (solo para la base de datos)", max_chars=50)
+
+        # Datos de documento del solicitante (solo BD)
+        col_doc1, col_doc2 = st.columns(2)
+        with col_doc1:
+            doc_tipo = st.selectbox(
+                "Tipo de documento del solicitante (para BD)",
+                ["DNI", "Carnet de extranjería"],
+            )
+        with col_doc2:
+            doc_num = st.text_input(
+                "N° de documento del solicitante (para BD)",
+                max_chars=20,
+            )
+
         # Vigencia
         vigencia_tipo = st.selectbox(
             "Tipo de vigencia",
@@ -341,6 +528,7 @@ def run_modulo_anuncios():
         }
 
         try:
+            # 1) Generar DOCX
             doc = DocxTemplate(cert_template_path)
             doc.render(contexto_cert, autoescape=True)
 
@@ -365,15 +553,30 @@ def run_modulo_anuncios():
                 ),
             )
 
+            # 2) Guardar en Excel (BD)
+            guardar_certificado_en_excel(
+                eval_ctx=eval_ctx,
+                vigencia_txt=vigencia_txt,
+                n_certificado=n_certificado,
+                fecha_cert=fecha_cert,
+                fisico=fisico,
+                tecnico=tecnico,
+                doc_tipo=doc_tipo,
+                doc_num=doc_num,
+                num_recibo=num_recibo,
+            )
+            st.info(f"Registro guardado/actualizado en: {BD_EXCEL_PATH}")
+
         except jinja2.TemplateSyntaxError as e:
             st.error("Hay un error de sintaxis en la plantilla de CERTIFICADO.")
             st.error(f"Plantilla: {cert_template_path}")
             st.error(f"Mensaje: {e.message}")
             st.error(f"Línea aproximada en el XML: {e.lineno}")
         except Exception as e:
-            st.error(f"Ocurrió un error al generar el certificado: {e}")
+            st.error(f"Ocurrió un error al generar el certificado o guardar en Excel: {e}")
 
 
+# Permite correr SOLO este módulo si quieres:
 if __name__ == "__main__":
     st.set_page_config(page_title="Anuncios Publicitarios", layout="centered")
     run_modulo_anuncios()
