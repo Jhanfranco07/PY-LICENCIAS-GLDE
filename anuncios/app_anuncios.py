@@ -10,17 +10,14 @@ import jinja2
 
 from utils import fecha_larga, safe_filename_pretty  # función común en utils.py
 
-# -------------------------------------------------------------------
-# RUTA DEL EXCEL DE BASE DE DATOS DE CERTIFICADOS
-# -------------------------------------------------------------------
-# Si quieres usar el formato oficial, cambia el nombre aquí:
+# Ruta del Excel de base de datos de certificados
+# Si quieres usar el archivo oficial, puedes cambiar este nombre:
 # BD_EXCEL_PATH = "BASE DE DATOS - CERTIFICADOS DE ANUNCIO.xlsx"
 BD_EXCEL_PATH = "BD_CERTIFICADOS_ANUNCIO.xlsx"
 
 
-# -------------------------------------------------------------------
-# HELPERS PARA BD
-# -------------------------------------------------------------------
+# ============ Helpers para la BD en Excel ============
+
 def split_nombre_apellidos(nombre_raw: str):
     """
     Separa en:
@@ -78,7 +75,7 @@ def guardar_certificado_en_excel(
     # Fechas en formato corto para Excel
     fecha_emision_str = fecha_cert.strftime("%d/%m/%Y") if fecha_cert else ""
 
-    # FECHA DE EXPIRACIÓN DE LA AUTORIZACION = texto de {{vigencia}}
+    # FECHA DE EXPIRACIÓN = texto de {{vigencia}}
     # -> "INDETERMINADA" o "TEMPORAL (X) MESES"
     fecha_expiracion_str = vigencia_txt
 
@@ -148,7 +145,7 @@ def guardar_certificado_en_excel(
         "LEYENDA": leyenda,
         "LARGO": largo,
         "ALTO": alto,
-        "ANCHO": "",  # por ahora no lo capturamos en el formulario
+        "ANCHO": "",   # por ahora no lo capturamos en el formulario
         "GROSOR": grosor,
         "LONGUITUD DE SOPORTES": altura_soporte,
         "COLOR": color,
@@ -179,9 +176,8 @@ def guardar_certificado_en_excel(
     df.to_excel(BD_EXCEL_PATH, index=False)
 
 
-# -------------------------------------------------------------------
-# APP PRINCIPAL: EVALUACIÓN + CERTIFICADO
-# -------------------------------------------------------------------
+# ============ Módulo principal ============
+
 def run_modulo_anuncios():
     st.header("📢 Anuncios Publicitarios – Evaluación y Certificado")
 
@@ -434,22 +430,6 @@ def run_modulo_anuncios():
         with colc2:
             fecha_cert = st.date_input("Fecha del certificado", value=date.today())
 
-        # N° de recibo (solo BD)
-        num_recibo = st.text_input("N° de recibo (solo para la base de datos)", max_chars=50)
-
-        # Datos de documento del solicitante (solo BD)
-        col_doc1, col_doc2 = st.columns(2)
-        with col_doc1:
-            doc_tipo = st.selectbox(
-                "Tipo de documento del solicitante (para BD)",
-                ["DNI", "Carnet de extranjería"],
-            )
-        with col_doc2:
-            doc_num = st.text_input(
-                "N° de documento del solicitante (para BD)",
-                max_chars=20,
-            )
-
         # Vigencia
         vigencia_tipo = st.selectbox(
             "Tipo de vigencia",
@@ -483,6 +463,27 @@ def run_modulo_anuncios():
             tecnico = st.selectbox(
                 "Características TÉCNICAS",
                 ["SENCILLO", "LUMINOSO", "ILUMINADO"]
+            )
+
+        st.markdown("### Datos para BD Excel (opcional)")
+        col_doc1, col_doc2, col_rec = st.columns(3)
+        with col_doc1:
+            doc_tipo = st.selectbox(
+                "Tipo de documento del solicitante",
+                ["DNI", "CARNET DE EXTRANJERIA"],
+                key="doc_tipo",
+            )
+        with col_doc2:
+            doc_num = st.text_input(
+                "N° documento del solicitante",
+                max_chars=20,
+                key="doc_num",
+            )
+        with col_rec:
+            num_recibo = st.text_input(
+                "N° de recibo (solo BD, opcional)",
+                max_chars=30,
+                key="num_recibo",
             )
 
         generar_cert = st.form_submit_button("Generar certificado")
@@ -528,7 +529,6 @@ def run_modulo_anuncios():
         }
 
         try:
-            # 1) Generar DOCX
             doc = DocxTemplate(cert_template_path)
             doc.render(contexto_cert, autoescape=True)
 
@@ -553,19 +553,18 @@ def run_modulo_anuncios():
                 ),
             )
 
-            # 2) Guardar en Excel (BD)
-            guardar_certificado_en_excel(
-                eval_ctx=eval_ctx,
-                vigencia_txt=vigencia_txt,
-                n_certificado=n_certificado,
-                fecha_cert=fecha_cert,
-                fisico=fisico,
-                tecnico=tecnico,
-                doc_tipo=doc_tipo,
-                doc_num=doc_num,
-                num_recibo=num_recibo,
-            )
-            st.info(f"Registro guardado/actualizado en: {BD_EXCEL_PATH}")
+            # Guardamos en sesión los datos necesarios para BD (pero NO lo escribimos aún)
+            st.session_state["anuncio_ultimo_cert_eval"] = eval_ctx
+            st.session_state["anuncio_ultimo_cert_meta"] = {
+                "vigencia_txt": vigencia_txt,
+                "n_certificado": n_certificado,
+                "fecha_cert": fecha_cert,
+                "fisico": fisico,
+                "tecnico": tecnico,
+                "doc_tipo": doc_tipo,
+                "doc_num": doc_num,
+                "num_recibo": num_recibo,
+            }
 
         except jinja2.TemplateSyntaxError as e:
             st.error("Hay un error de sintaxis en la plantilla de CERTIFICADO.")
@@ -573,10 +572,57 @@ def run_modulo_anuncios():
             st.error(f"Mensaje: {e.message}")
             st.error(f"Línea aproximada en el XML: {e.lineno}")
         except Exception as e:
-            st.error(f"Ocurrió un error al generar el certificado o guardar en Excel: {e}")
+            st.error(f"Ocurrió un error al generar el certificado: {e}")
+
+    # -------------------------------------------------------------------------
+    #         BLOQUE: GUARDAR EN BD EXCEL + VER Y DESCARGAR
+    # -------------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("📑 Registro en BD Excel de Certificados")
+
+    ult_eval = st.session_state.get("anuncio_ultimo_cert_eval")
+    ult_meta = st.session_state.get("anuncio_ultimo_cert_meta")
+
+    if not ult_eval or not ult_meta:
+        st.info("Genera un certificado para poder registrarlo en la base de datos Excel.")
+    else:
+        if st.button("💾 Guardar último certificado en BD Excel"):
+            try:
+                guardar_certificado_en_excel(
+                    ult_eval,
+                    ult_meta["vigencia_txt"],
+                    ult_meta["n_certificado"],
+                    ult_meta["fecha_cert"],
+                    ult_meta["fisico"],
+                    ult_meta["tecnico"],
+                    ult_meta["doc_tipo"],
+                    ult_meta["doc_num"],
+                    ult_meta["num_recibo"],
+                )
+                st.success("Certificado registrado en la base de datos Excel.")
+            except Exception as e:
+                st.error(f"Ocurrió un error al guardar en Excel: {e}")
+
+    st.markdown("### 📊 Ver / descargar base de datos")
+
+    if os.path.exists(BD_EXCEL_PATH):
+        try:
+            df_bd = pd.read_excel(BD_EXCEL_PATH)
+            st.dataframe(df_bd, use_container_width=True)
+
+            with open(BD_EXCEL_PATH, "rb") as f:
+                st.download_button(
+                    "⬇️ Descargar Excel de certificados",
+                    data=f,
+                    file_name=os.path.basename(BD_EXCEL_PATH),
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+        except Exception as e:
+            st.error(f"No se pudo leer el Excel de BD: {e}")
+    else:
+        st.info("Aún no existe el archivo de base de datos. Guarda al menos un certificado para crearlo.")
 
 
-# Permite correr SOLO este módulo si quieres:
 if __name__ == "__main__":
     st.set_page_config(page_title="Anuncios Publicitarios", layout="centered")
     run_modulo_anuncios()
