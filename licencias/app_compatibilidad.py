@@ -147,10 +147,13 @@ def run_modulo_compatibilidad():
         unsafe_allow_html=True,
     )
 
-    # ---------- Control de Nº de giros (fuera del form, se actualiza al vuelo) ----------
+    # ---------- Control de Nº de giros (fuera del form) ----------
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Detalle de giros de la tabla</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Detalle de giros de la tabla</div>',
+        unsafe_allow_html=True,
+    )
     st.caption("Puedes registrar varios giros en la tabla de compatibilidad.")
     n_giros_tabla = st.number_input(
         "N° de giros en la tabla",
@@ -166,23 +169,24 @@ def run_modulo_compatibilidad():
     # ---------- Formulario principal ----------
     with st.form("form_compatibilidad"):
 
-        # ---------------- Bloque: Encabezado / compatibilidad ----------------
-        st.markdown('<div class="section-title">Encabezado</div>', unsafe_allow_html=True)
-        c_enc1, c_enc2 = st.columns([2, 1])
-        with c_enc1:
-            n_compa = st.text_input(
-                "N° de compatibilidad*",
-                max_chars=10,
-                placeholder="Ej: 1010",
-            )
-        with c_enc2:
-            st.write("")  # pequeño espacio visual
-            st.caption("En el Word se mostrará como N° {{n_compa}}-2026-MDP-GLDE")
+        # ---------------- Encabezado ----------------
+        st.markdown(
+            '<div class="section-title">Encabezado</div>',
+            unsafe_allow_html=True,
+        )
+        n_compa = st.text_input(
+            "N° de compatibilidad*",
+            max_chars=10,
+            placeholder="Ej: 1010",
+        )
 
         st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
-        # ---------------- Bloque: Datos del solicitante ----------------
-        st.markdown('<div class="section-title">Datos del solicitante</div>', unsafe_allow_html=True)
+        # ---------------- Datos del solicitante ----------------
+        st.markdown(
+            '<div class="section-title">Datos del solicitante</div>',
+            unsafe_allow_html=True,
+        )
         c1, c2 = st.columns(2)
         with c1:
             persona = st.text_input("Solicitante*", max_chars=150)
@@ -195,8 +199,11 @@ def run_modulo_compatibilidad():
 
         st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
-        # ---------------- Bloque: Datos de la actividad ----------------
-        st.markdown('<div class="section-title">Datos de la actividad</div>', unsafe_allow_html=True)
+        # ---------------- Datos de la actividad ----------------
+        st.markdown(
+            '<div class="section-title">Datos de la actividad</div>',
+            unsafe_allow_html=True,
+        )
 
         giro = st.text_area(
             "Uso comercial / giro (texto general)*",
@@ -233,18 +240,19 @@ def run_modulo_compatibilidad():
                 ],
             )
         with col_tipo:
-            tipo_licencia = st.selectbox(
+            # opciones cortas para el usuario
+            tipo_licencia_simple = st.selectbox(
                 "Tipo de licencia*",
-                [
-                    "LICENCIA DE FUNCIONAMIENTO INDETERMINADA",
-                    "LICENCIA DE FUNCIONAMIENTO TEMPORAL (01 AÑO)",
-                ],
+                ["INDETERMINADA", "TEMPORAL"],
             )
 
         st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
-        # ---------------- Bloque: Actividad general + zonificación ----------------
-        st.markdown('<div class="section-title">Actividad general y zonificación</div>', unsafe_allow_html=True)
+        # ---------------- Actividad general + zonificación ----------------
+        st.markdown(
+            '<div class="section-title">Actividad general y zonificación</div>',
+            unsafe_allow_html=True,
+        )
 
         col_act1, col_act2 = st.columns([3, 1])
         with col_act1:
@@ -257,12 +265,14 @@ def run_modulo_compatibilidad():
         zona_codigo = zona_sel.split(" – ")[0]
         zona_desc = ZONAS_DICT.get(zona_codigo, "")
 
-        st.caption("En el Word se mostrará el código y su descripción (p. ej. CZ / COMERCIO ZONAL).")
-
+        
         st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
-        # ---------------- Bloque: Giros de la tabla ----------------
-        st.markdown('<div class="section-title">Giros de la tabla de compatibilidad</div>', unsafe_allow_html=True)
+        # ---------------- Giros de la tabla ----------------
+        st.markdown(
+            '<div class="section-title">Giros de la tabla de compatibilidad</div>',
+            unsafe_allow_html=True,
+        )
 
         actividades_tabla = []
         for i in range(n_giros_tabla):
@@ -301,8 +311,11 @@ def run_modulo_compatibilidad():
 
         st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
-        # ---------------- Bloque: Datos de expediente y fecha ----------------
-        st.markdown('<div class="section-title">Datos de expediente y fecha</div>', unsafe_allow_html=True)
+        # ---------------- Datos de expediente y fecha ----------------
+        st.markdown(
+            '<div class="section-title">Datos de expediente y fecha</div>',
+            unsafe_allow_html=True,
+        )
 
         col_exp1, col_exp2 = st.columns([2, 1])
         with col_exp1:
@@ -326,6 +339,13 @@ def run_modulo_compatibilidad():
     # Si todavía no se envía el formulario, no generamos nada
     if not generar:
         return
+
+    # Mapear opción corta de licencia al texto completo del documento
+    tipo_licencia_map = {
+        "INDETERMINADA": "LICENCIA DE FUNCIONAMIENTO INDETERMINADA",
+        "TEMPORAL": "LICENCIA DE FUNCIONAMIENTO TEMPORAL (01 AÑO)",
+    }
+    tipo_licencia = tipo_licencia_map.get(tipo_licencia_simple, "")
 
     # --------- Validaciones básicas ---------
     faltantes = []
@@ -393,9 +413,8 @@ def run_modulo_compatibilidad():
         "codigo": codigo,
 
         # Código y descripción de la zona
-        # En Word puedes usar:
-        #   {{zona}}
-        #   {{zona_desc}}
+        # En Word:
+        #   {{zona}} / {{zona_desc}}
         "zona": zona_codigo,
         "zona_desc": to_upper(zona_desc),
 
@@ -410,7 +429,7 @@ def run_modulo_compatibilidad():
         "actividades_tabla": actividades_tabla,
     }
 
-    # Elegir plantilla según tipo de licencia
+    # Elegir plantilla según tipo de licencia (ya con texto completo)
     if "LICENCIA DE FUNCIONAMIENTO INDETERMINADA" in tipo_licencia:
         tpl_path = TPL_COMP_INDETERMINADA
     else:
