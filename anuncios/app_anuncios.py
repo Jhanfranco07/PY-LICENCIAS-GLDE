@@ -660,7 +660,7 @@ def run_modulo_anuncios():
             "Genera un certificado y luego podrás guardarlo aquí."
         )
     else:
-        if st.button("💾 Guardar último certificado en BD Excel"):
+        if st.button("💾 Guardar certificado en Excel"):
             try:
                 guardar_certificado_en_excel(
                     ult_eval,
