@@ -53,18 +53,16 @@ def _get_session(token: str) -> requests.Session:
     )
     return s
 
-
 def _get_json(url: str, params: Optional[dict] = None) -> Dict[str, Any]:
-    """
-    GET genérico con headers correctos para APIs que devuelven 406 si no hay Accept.
-    NO se envía Content-Type en GET.
-    """
     token = _get_token()
-    session = _get_session(token)
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+        "Content-Type": "application/json",  # 👈 FIX para el 415
+    }
 
     try:
-        resp = session.get(url, params=params, timeout=20)
-        # si el WAF responde HTML, igual aquí cae y lo mostramos en el error
+        resp = requests.get(url, headers=headers, params=params, timeout=20)
         resp.raise_for_status()
         data = resp.json()
     except requests.HTTPError as e:
@@ -73,18 +71,11 @@ def _get_json(url: str, params: Optional[dict] = None) -> Dict[str, Any]:
             body = (resp.text or "")[:300]
         except Exception:
             body = ""
-
         raise CodartAPIError(f"HTTP {resp.status_code}: {body}") from e
     except requests.RequestException as e:
         raise CodartAPIError(f"Error HTTP/red consultando CODART: {e}") from e
     except ValueError as e:
-        # No fue JSON (a veces WAF devuelve HTML con 200/406)
-        raw = ""
-        try:
-            raw = (resp.text or "")[:300]
-        except Exception:
-            raw = ""
-        raise CodartAPIError(f"La respuesta de CODART no fue JSON válido. Raw: {raw}") from e
+        raise CodartAPIError("La respuesta de CODART no fue JSON válido.") from e
 
     if not isinstance(data, dict):
         raise CodartAPIError("Respuesta inesperada de CODART (no es dict).")
@@ -94,6 +85,7 @@ def _get_json(url: str, params: Optional[dict] = None) -> Dict[str, Any]:
         raise CodartAPIError(f"CODART respondió error: {msg}")
 
     return data
+
 
 
 def validar_dni(dni: str) -> str:
