@@ -181,6 +181,42 @@ def guardar_certificado_en_excel(
 def run_modulo_anuncios():
     st.header("📢 Anuncios Publicitarios – Evaluación y Certificado")
 
+    # Estilos visuales tipo “card”
+    st.markdown(
+        """
+        <style>
+        .block-container { padding-top: 1.0rem; max-width: 900px; }
+        .stButton>button {
+            border-radius: 10px;
+            padding: .55rem 1rem;
+            font-weight: 600;
+        }
+        .card {
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 16px;
+            padding: 18px 20px;
+            margin-bottom: 18px;
+            background: rgba(15, 23, 42, 0.35);
+        }
+        .section-title {
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #9ca3af;
+            margin-bottom: 0.35rem;
+            font-weight: 600;
+        }
+        .section-divider {
+            margin: 0.4rem 0 0.9rem 0;
+            border-top: 1px solid rgba(148, 163, 184, 0.35);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+
     # ========= Rutas de plantillas (carpeta en la RAÍZ del proyecto) =========
     TEMPLATES_EVAL = {
         "PANEL SIMPLE - AZOTEAS": "plantillas_publicidad/evaluacion_panel_simple_azotea.docx",
@@ -198,33 +234,44 @@ def run_modulo_anuncios():
         "PANEL SENCILLO Y LUMINOSO": "plantillas_publicidad/certificado_panel_sencillo_luminoso.docx",
     }
 
+    # -------------------- Selección de tipo de anuncio --------------------
+    st.markdown(
+        '<div class="section-title">Tipo de anuncio publicitario</div>',
+        unsafe_allow_html=True,
+    )
     tipo_anuncio = st.selectbox(
-        "Tipo de anuncio publicitario",
-        list(TEMPLATES_EVAL.keys())
+        "Selecciona el tipo de anuncio",
+        list(TEMPLATES_EVAL.keys()),
     )
 
-    st.markdown("---")
+    st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
     # ------------------------ MÓDULO 1 · EVALUACIÓN --------------------------
-
-    # Estos tipos usan GROSOR en las dimensiones
-    usa_grosor = tipo_anuncio in (
-        "PANEL SENCILLO Y LUMINOSO",
-        "LETRAS RECORTADAS",
-        "TOLDO SENCILLO",
-    )
-    # Este tipo usa ALTURA (soporte) extra
-    usa_altura_extra = tipo_anuncio == "PANEL SIMPLE - AZOTEAS"
-
-    grosor = 0.0
-    altura_extra = 0.0
-
     with st.form("form_evaluacion"):
 
-        # ---------------- Datos del solicitante ----------------
-        st.subheader("Datos del solicitante")
+        st.markdown(
+            '<div class="section-title">Evaluación del anuncio</div>',
+            unsafe_allow_html=True,
+        )
 
-        # Tipo de contribuyente / RUC 10 vs RUC 20
+        # Estos tipos usan GROSOR en las dimensiones
+        usa_grosor = tipo_anuncio in (
+            "PANEL SENCILLO Y LUMINOSO",
+            "LETRAS RECORTADAS",
+            "TOLDO SENCILLO",
+        )
+        # Este tipo usa ALTURA (soporte) extra
+        usa_altura_extra = tipo_anuncio == "PANEL SIMPLE - AZOTEAS"
+
+        grosor = 0.0
+        altura_extra = 0.0
+
+        # ---------------- Datos del solicitante ----------------
+        st.markdown(
+            '<div class="section-title">Datos del solicitante</div>',
+            unsafe_allow_html=True,
+        )
+
         tipo_ruc_label = st.radio(
             "Tipo de contribuyente",
             ["RUC 10 – Persona natural", "RUC 20 – Persona jurídica"],
@@ -243,7 +290,6 @@ def run_modulo_anuncios():
                 key="nombre_sol",
             )
 
-            # SOLO aparece si es RUC 20
             if es_ruc20:
                 representante = st.text_input(
                     "Representante legal (solo RUC 20)",
@@ -263,8 +309,13 @@ def run_modulo_anuncios():
         with col2:
             ruc = st.text_input("RUC", max_chars=15, key="ruc_sol")
 
+        st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
+
         # ---------------- Datos del anuncio ----------------
-        st.subheader("Datos del anuncio")
+        st.markdown(
+            '<div class="section-title">Datos del anuncio</div>',
+            unsafe_allow_html=True,
+        )
 
         col3, col4 = st.columns(2)
         with col3:
@@ -299,8 +350,13 @@ def run_modulo_anuncios():
             "Ubicación del anuncio", max_chars=200, key="ubicacion_an"
         )
 
+        st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
+
         # ---------------- Datos administrativos ----------------
-        st.subheader("Datos administrativos")
+        st.markdown(
+            '<div class="section-title">Datos administrativos</div>',
+            unsafe_allow_html=True,
+        )
         col6, col7, col8 = st.columns(3)
         with col6:
             n_anuncio = st.text_input("N° de anuncio (ej. 001)", key="n_anuncio")
@@ -322,7 +378,8 @@ def run_modulo_anuncios():
                 key="anio_an",
             )
 
-        generar_eval = st.form_submit_button("Generar evaluación")
+        st.markdown("")
+        generar_eval = st.form_submit_button("📝 Generar evaluación (.docx)")
 
     # ---------- GENERACIÓN DEL WORD (EVALUACIÓN) ----------
     if generar_eval:
@@ -393,8 +450,11 @@ def run_modulo_anuncios():
     # -------------------------------------------------------------------------
     #                    MÓDULO 2 · CERTIFICADO
     # -------------------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("📜 Certificado de Anuncio Publicitario")
+    st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Certificado de anuncio publicitario</div>',
+        unsafe_allow_html=True,
+    )
 
     eval_ctx = st.session_state.get("anuncio_eval_ctx")
 
@@ -483,11 +543,10 @@ def run_modulo_anuncios():
                     key="num_recibo",
                 )
 
-            generar_cert = st.form_submit_button("Generar certificado")
+            generar_cert = st.form_submit_button("📜 Generar certificado (.docx)")
     else:
         st.info("Primero genera la **Evaluación** para poder armar el certificado.")
-        generar_cert = False  # para que no explote más abajo
-        # inicializamos variables para que el código no reviente si alguien toca el botón por error
+        generar_cert = False
         n_certificado = ""
         fecha_cert = None
         vigencia_tipo = "INDETERMINADA"
@@ -586,15 +645,20 @@ def run_modulo_anuncios():
     # -------------------------------------------------------------------------
     #      OPCIÓN PARA GUARDAR EL ÚLTIMO CERTIFICADO EN LA BD
     # -------------------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("📑 Registrar último certificado en BD Excel")
+    st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Registrar último certificado en BD Excel</div>',
+        unsafe_allow_html=True,
+    )
 
     ult_eval = st.session_state.get("anuncio_ultimo_cert_eval")
     ult_meta = st.session_state.get("anuncio_ultimo_cert_meta")
 
     if not ult_eval or not ult_meta:
-        st.info("Todavía no hay un certificado reciente para registrar en la BD. "
-                "Genera un certificado y luego podrás guardarlo aquí.")
+        st.info(
+            "Todavía no hay un certificado reciente para registrar en la BD. "
+            "Genera un certificado y luego podrás guardarlo aquí."
+        )
     else:
         if st.button("💾 Guardar último certificado en BD Excel"):
             try:
@@ -614,28 +678,57 @@ def run_modulo_anuncios():
                 st.error(f"Ocurrió un error al guardar en Excel: {e}")
 
     # -------------------------------------------------------------------------
-    #     POR ÚLTIMO: VER / DESCARGAR BD (SIEMPRE QUE EXISTA EL EXCEL)
+    #     VER / EDITAR / DESCARGAR BD (SI EXISTE EL EXCEL)
     # -------------------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("📊 Ver / descargar base de datos")
+    st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">Base de datos de certificados</div>',
+        unsafe_allow_html=True,
+    )
 
     if os.path.exists(BD_EXCEL_PATH):
         try:
             df_bd = pd.read_excel(BD_EXCEL_PATH)
-            st.dataframe(df_bd, use_container_width=True)
 
+            with st.expander("Ver / editar base de datos"):
+                edited_df = st.data_editor(
+                    df_bd,
+                    num_rows="dynamic",
+                    use_container_width=True,
+                    key="editor_bd_certificados",
+                )
+                st.caption(
+                    "Puedes editar celdas o agregar / eliminar filas. "
+                    "Luego guarda los cambios en el archivo Excel."
+                )
+
+                if st.button("💾 Guardar cambios en Excel"):
+                    try:
+                        edited_df.to_excel(BD_EXCEL_PATH, index=False)
+                        st.success("Cambios guardados correctamente en el Excel.")
+                    except Exception as e:
+                        st.error(f"No se pudo guardar el Excel: {e}")
+
+            # Botón de descarga del archivo actual
             with open(BD_EXCEL_PATH, "rb") as f:
                 st.download_button(
                     "⬇️ Descargar Excel de certificados",
                     data=f,
                     file_name=os.path.basename(BD_EXCEL_PATH),
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    mime=(
+                        "application/vnd.openxmlformats-"
+                        "officedocument.spreadsheetml.sheet"
+                    ),
                 )
         except Exception as e:
             st.error(f"No se pudo leer el Excel de BD: {e}")
     else:
-        st.info("Aún no existe el archivo de base de datos. "
-                "Cuando guardes un certificado, se creará automáticamente.")
+        st.info(
+            "Aún no existe el archivo de base de datos. "
+            "Cuando guardes un certificado, se creará automáticamente."
+        )
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
