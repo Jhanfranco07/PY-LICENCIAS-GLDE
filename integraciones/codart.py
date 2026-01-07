@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 import streamlit as st
@@ -17,37 +17,46 @@ class CodartAPIError(Exception):
 
 def _get_token() -> str:
     """
-    Busca el token en:
-    1) st.secrets["CODART_TOKEN"]
-    2) variable de entorno CODART_TOKEN
+    Streamlit Cloud: usa st.secrets["CODART_TOKEN"].
+    Fallback: variable de entorno CODART_TOKEN (por si lo usas en otro host).
     """
     token = None
     try:
-        token = st.secrets.get("4syr7O3SF7iwlzDe3plAI2zkaid37cJ2EIFhdyPm1XDb4HV7raC0OFX8aZa4")
+        token = st.secrets.get("CODART_TOKEN")
     except Exception:
         token = None
 
     if not token:
-        token = os.getenv("4syr7O3SF7iwlzDe3plAI2zkaid37cJ2EIFhdyPm1XDb4HV7raC0OFX8aZa4")
+        token = os.getenv("CODART_TOKEN")
 
     if not token:
-        raise CodartAPIError(
-            "Falta CODART_TOKEN. Configúralo en .streamlit/secrets.toml o como variable de entorno."
-        )
+        raise CodartAPIError("Falta CODART_TOKEN. Configúralo en Streamlit Cloud: Settings → Secrets.")
     return token
 
 
-def _get_json(url: str) -> Dict[str, Any]:
+def _get_json(url: str, params: Optional[dict] = None) -> Dict[str, Any]:
+    """
+    GET genérico con headers correctos para APIs que devuelven 406 si no hay Accept.
+    NO se envía Content-Type en GET.
+    """
     token = _get_token()
     headers = {
-        "Content-Type": "application/json",
         "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
     }
 
     try:
-        resp = requests.get(url, headers=headers, timeout=20)
+        resp = requests.get(url, headers=headers, params=params, timeout=20)
         resp.raise_for_status()
         data = resp.json()
+    except requests.HTTPError as e:
+        # resp existe aquí, mostramos algo de cuerpo para debug
+        body = ""
+        try:
+            body = (resp.text or "")[:300]
+        except Exception:
+            body = ""
+        raise CodartAPIError(f"HTTP {resp.status_code}: {body}") from e
     except requests.RequestException as e:
         raise CodartAPIError(f"Error HTTP/red consultando CODART: {e}") from e
     except ValueError as e:
@@ -77,30 +86,59 @@ def validar_ruc(ruc: str) -> str:
     return ruc
 
 
-@st.cache_data(ttl=60 * 60 * 24)  # 24h
+@st.cache_data(ttl=60 * 60 * 24)  # 24h (ahorra consultas)
 def consultar_dni(dni: str) -> Dict[str, Any]:
     """
-    RENIEC DNI:
-    GET https://api.codart.cgrt.net/api/v1/consultas/reniec/dni/{dni}
-    Devuelve result (dict).
+    RENIEC DNI.
+    Algunas docs muestran /reniec/dni/dni con query param (?dni=...).
+    Algunas implementaciones soportan /reniec/dni/{dni}.
+    Aquí probamos ambas.
     """
     dni_ok = validar_dni(dni)
-    url = f"{BASE_URL}/reniec/dni/{dni_ok}"
-    data = _get_json(url)
-    return data.get("result", {}) or {}
+
+    # Intento A: DNI como path
+    url_a = f"{BASE_URL}/reniec/dni/{dni_ok}"
+
+    # Intento B: DNI como query param (según doc: /reniec/dni/dni)
+    url_b = f"{BASE_URL}/reniec/dni/dni"
+    params_b = {"dni": dni_ok}
+
+    try:
+        data = _get_json(url_a)
+        return data.get("result", {}) or {}
+    except CodartAPIError as e:
+        msg = str(e)
+        # si es 404 o 406, probamos el formato alternativo
+        if "HTTP 404" in msg or "HTTP 406" in msg:
+            data = _get_json(url_b, params=params_b)
+            return data.get("result", {}) or {}
+        raise
 
 
 @st.cache_data(ttl=60 * 60 * 24)
 def consultar_ruc(ruc: str) -> Dict[str, Any]:
     """
-    SUNAT RUC:
-    GET https://api.codart.cgrt.net/api/v1/consultas/sunat/ruc/{ruc}
-    Devuelve result (dict).
+    SUNAT RUC.
+    Igual que DNI: puede ser /sunat/ruc/{ruc} o /sunat/ruc/ruc?ruc=...
     """
     ruc_ok = validar_ruc(ruc)
-    url = f"{BASE_URL}/sunat/ruc/{ruc_ok}"
-    data = _get_json(url)
-    return data.get("result", {}) or {}
+
+    # Intento A: RUC como path
+    url_a = f"{BASE_URL}/sunat/ruc/{ruc_ok}"
+
+    # Intento B: RUC como query param (según doc: /sunat/ruc/ruc)
+    url_b = f"{BASE_URL}/sunat/ruc/ruc"
+    params_b = {"ruc": ruc_ok}
+
+    try:
+        data = _get_json(url_a)
+        return data.get("result", {}) or {}
+    except CodartAPIError as e:
+        msg = str(e)
+        if "HTTP 404" in msg or "HTTP 406" in msg:
+            data = _get_json(url_b, params=params_b)
+            return data.get("result", {}) or {}
+        raise
 
 
 def dni_a_nombre_completo(res: Dict[str, Any]) -> str:
