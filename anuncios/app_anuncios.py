@@ -787,13 +787,21 @@ def run_modulo_anuncios():
                 except Exception as e:
                     st.error(f"No se pudo actualizar la BD: {e}")
 
-        # Descarga rápida como CSV (Excel lo abre normal)
-        csv_data = df_bd.to_csv(index=False).encode("utf-8-sig")
+        # Usamos lo que se ve en pantalla (edited_df) para la descarga
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            edited_df.to_excel(writer, sheet_name="Certificados", index=False)
+
+        buffer.seek(0)
+
         st.download_button(
-            "⬇️ Descargar BD como CSV",
-            data=csv_data,
-            file_name="BD_CERTIFICADOS_ANUNCIO.csv",
-            mime="text/csv",
+            "⬇️ Descargar BD como Excel",
+            data=buffer,
+            file_name="BD_CERTIFICADOS_ANUNCIO.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-"
+                "officedocument.spreadsheetml.document"
+            ),
         )
     else:
         st.info(
