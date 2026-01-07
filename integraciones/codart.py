@@ -23,12 +23,12 @@ def _get_token() -> str:
     """
     token = None
     try:
-        token = st.secrets.get("CODART_TOKEN")
+        token = st.secrets.get("4syr7O3SF7iwlzDe3plAI2zkaid37cJ2EIFhdyPm1XDb4HV7raC0OFX8aZa4")
     except Exception:
         token = None
 
     if not token:
-        token = os.getenv("CODART_TOKEN")
+        token = os.getenv("4syr7O3SF7iwlzDe3plAI2zkaid37cJ2EIFhdyPm1XDb4HV7raC0OFX8aZa4")
 
     if not token:
         raise CodartAPIError(
