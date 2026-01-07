@@ -76,6 +76,7 @@ def render_doc(context: dict, filename_stem: str, plantilla_path: str):
         return
 
     try:
+        # Importante para caracteres especiales (&, <, >, etc.)
         doc.render(context, autoescape=True)
     except Exception as e:
         st.error("Ocurrió un error al rellenar la plantilla.")
@@ -106,10 +107,9 @@ def run_modulo_compatibilidad():
     st.header("🏢 Evaluación de Compatibilidad de Uso")
 
     asegurar_dirs()
-    # carpeta específica para estas plantillas
     os.makedirs("plantilla_compa", exist_ok=True)
 
-    # rutas que me indicas
+    # rutas de plantillas
     TPL_COMP_INDETERMINADA = "plantilla_compa/compatibilidad_indeterminada.docx"
     TPL_COMP_TEMPORAL = "plantilla_compa/compatibilidad_temporal.docx"
 
@@ -135,6 +135,7 @@ def run_modulo_compatibilidad():
             placeholder="Ej: 1010",
         )
 
+        # ---------------- Datos del solicitante ----------------
         st.subheader("Datos del solicitante")
         c1, c2 = st.columns(2)
         with c1:
@@ -146,6 +147,7 @@ def run_modulo_compatibilidad():
 
         direccion = st.text_input("Dirección*", max_chars=200)
 
+        # ---------------- Datos de la actividad ----------------
         st.subheader("Datos de la actividad")
         giro = st.text_area("Uso comercial / giro*", height=60)
 
@@ -186,15 +188,58 @@ def run_modulo_compatibilidad():
         st.markdown("---")
         st.subheader("Actividad específica y zonificación")
 
+        # Actividad general (cabecera de la tabla)
         actividad = st.text_input("Actividad general*", max_chars=200)
         codigo = st.text_input("Código de la actividad*", max_chars=50)
 
+        # ----- Detalle de giros (filas de la tabla) -----
+        st.markdown("**Detalle de giros de la tabla (pueden ser varios)**")
+        num_giros = st.number_input(
+            "N° de giros en la tabla",
+            min_value=1,
+            max_value=7,
+            value=1,
+            step=1,
+            key="num_giros_tabla",
+        )
+
+        actividades_tabla = []
+        for i in range(int(num_giros)):
+            st.markdown(f"**Giro {i + 1}**")
+            cg1, cg2, cg3 = st.columns([1.1, 2.8, 1.1])
+            with cg1:
+                codigo_i = st.text_input(
+                    f"Código {i + 1}",
+                    max_chars=50,
+                    key=f"codigo_tabla_{i+1}",
+                )
+            with cg2:
+                giro_i = st.text_input(
+                    f"Giro {i + 1}",
+                    max_chars=200,
+                    key=f"giro_tabla_{i+1}",
+                )
+            with cg3:
+                conf_i = st.selectbox(
+                    f"Conformidad {i + 1}",
+                    ["SI", "NO"],
+                    key=f"conf_tabla_{i+1}",
+                )
+
+            actividades_tabla.append(
+                {
+                    "codigo": codigo_i,
+                    "giro": giro_i,
+                    "conf_si": "X" if conf_i == "SI" else "",
+                    "conf_no": "X" if conf_i == "NO" else "",
+                }
+            )
+
+        # Zonificación (única para todos los giros)
         zona_opciones = [f"{c} – {d}" for c, d in ZONAS]
         zona_sel = st.selectbox("Zonificación (código)*", zona_opciones)
         zona_codigo = zona_sel.split(" – ")[0]
         zona_desc = ZONAS_DICT.get(zona_codigo, "")
-
-        conformidad = st.selectbox("Conformidad*", ["SI", "NO"])
 
         st.markdown("---")
         st.subheader("Datos de expediente y fecha")
@@ -213,6 +258,7 @@ def run_modulo_compatibilidad():
 
         generar = st.form_submit_button("🧾 Generar compatibilidad (.docx)")
 
+    # Si aún no se envía el formulario, no hago nada más
     if not generar:
         return
 
@@ -235,12 +281,20 @@ def run_modulo_compatibilidad():
         if isinstance(val, str) and not val.strip():
             faltantes.append(key)
 
+    # Ordenanzas y fechas
     if not ordenanzas_sel:
         faltantes.append("ordenanzas")
     if not fecha_ds:
         faltantes.append("fecha_ds")
     if not fecha_doc:
         faltantes.append("fecha_doc")
+
+    # Validar cada giro de la tabla
+    for idx, fila in enumerate(actividades_tabla, start=1):
+        if not str(fila.get("codigo", "")).strip():
+            faltantes.append(f"codigo_giro_{idx}")
+        if not str(fila.get("giro", "")).strip():
+            faltantes.append(f"giro_{idx}")
 
     if faltantes:
         st.error("Faltan campos obligatorios: " + ", ".join(faltantes))
@@ -260,39 +314,60 @@ def run_modulo_compatibilidad():
     # Nombre comercial vacío
     nom_com_val = nom_comercio.strip() or "--------------------"
 
-    # X en SI / NO
-    conf_si = "X" if conformidad == "SI" else ""
-    conf_no = "X" if conformidad == "NO" else ""
-
+    # Ordenanzas unidas por coma
     ordenanza_texto = ", ".join(ordenanzas_sel)
 
+    # Preparamos la lista para la tabla (en mayúsculas donde corresponde)
+    actividades_tabla_ctx = []
+    for fila in actividades_tabla:
+        actividades_tabla_ctx.append(
+            {
+                "codigo": fila["codigo"].strip(),
+                "giro": to_upper(fila["giro"]),
+                "conf_si": fila["conf_si"],
+                "conf_no": fila["conf_no"],
+            }
+        )
+
+    # Contexto para la plantilla
     ctx = {
+        # Encabezado
         "n_compa": n_compa,                     # N° {{n_compa}}-2026-MDP-GLDE
+
+        # Datos del solicitante
         "persona": to_upper(persona),
         "dni": dni_val,
         "ruc": ruc_val,
         "nom_comercio": to_upper(nom_com_val),
         "direccion": to_upper(direccion),
-        "giro": to_upper(giro),
 
+        # Datos de la actividad
+        "giro": to_upper(giro),
         "ordenanza": ordenanza_texto,
         "area": area,
         "itse": itse,
         "certificador": certificador,
         "tipo_licencia": tipo_licencia,
 
+        # Cabecera de la tabla
         "actividad": to_upper(actividad),
         "codigo": codigo,
 
+        # Zona (única para todos los giros)
         "zona": zona_codigo,
         "zona_desc": zona_desc,
 
+        # Expediente y fechas
         "ds": ds,
         "fecha_ds": fecha_mes_abrev(fecha_ds),
         "fecha_actual": fmt_fecha_larga(fecha_doc),
 
-        "conf_si": conf_si,
-        "conf_no": conf_no,
+        # Detalle de giros para la tabla
+        # En Word usarás:
+        # {% for fila in actividades_tabla %}
+        #   {{ fila.codigo }} / {{ fila.giro }} / {{ zona }} / {{ fila.conf_si }} ...
+        # {% endfor %}
+        "actividades_tabla": actividades_tabla_ctx,
     }
 
     # Elegir plantilla según tipo de licencia
