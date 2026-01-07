@@ -113,14 +113,35 @@ def run_modulo_compatibilidad():
     TPL_COMP_INDETERMINADA = "plantilla_compa/compatibilidad_indeterminada.docx"
     TPL_COMP_TEMPORAL = "plantilla_compa/compatibilidad_temporal.docx"
 
-    # un poco de estilo
+    # Estilos visuales
     st.markdown(
         """
         <style>
         .block-container { padding-top: 1.0rem; max-width: 900px; }
-        .stButton>button { border-radius: 10px; padding: .55rem 1rem; font-weight: 600; }
-        .card { border: 1px solid #e5e7eb; border-radius: 16px;
-                padding: 16px; margin-bottom: 12px; background: #0f172a08; }
+        .stButton>button {
+            border-radius: 10px;
+            padding: .55rem 1rem;
+            font-weight: 600;
+        }
+        .card {
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            border-radius: 16px;
+            padding: 18px 20px;
+            margin-bottom: 18px;
+            background: rgba(15, 23, 42, 0.35);
+        }
+        .section-title {
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #9ca3af;
+            margin-bottom: 0.35rem;
+            font-weight: 600;
+        }
+        .section-divider {
+            margin: 0.4rem 0 0.9rem 0;
+            border-top: 1px solid rgba(148, 163, 184, 0.35);
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -129,7 +150,8 @@ def run_modulo_compatibilidad():
     # ---------- Control de Nº de giros (fuera del form, se actualiza al vuelo) ----------
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    st.subheader("Detalle de giros de la tabla (pueden ser varios)")
+    st.markdown('<div class="section-title">Detalle de giros de la tabla</div>', unsafe_allow_html=True)
+    st.caption("Puedes registrar varios giros en la tabla de compatibilidad.")
     n_giros_tabla = st.number_input(
         "N° de giros en la tabla",
         min_value=1,
@@ -139,17 +161,28 @@ def run_modulo_compatibilidad():
     )
     n_giros_tabla = int(n_giros_tabla)
 
+    st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
+
     # ---------- Formulario principal ----------
     with st.form("form_compatibilidad"):
 
-        # Encabezado (en Word será N° {{n_compa}}-2026-MDP-GLDE)
-        n_compa = st.text_input(
-            "N° de compatibilidad*",
-            max_chars=10,
-            placeholder="Ej: 1010",
-        )
+        # ---------------- Bloque: Encabezado / compatibilidad ----------------
+        st.markdown('<div class="section-title">Encabezado</div>', unsafe_allow_html=True)
+        c_enc1, c_enc2 = st.columns([2, 1])
+        with c_enc1:
+            n_compa = st.text_input(
+                "N° de compatibilidad*",
+                max_chars=10,
+                placeholder="Ej: 1010",
+            )
+        with c_enc2:
+            st.write("")  # pequeño espacio visual
+            st.caption("En el Word se mostrará como N° {{n_compa}}-2026-MDP-GLDE")
 
-        st.subheader("Datos del solicitante")
+        st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
+
+        # ---------------- Bloque: Datos del solicitante ----------------
+        st.markdown('<div class="section-title">Datos del solicitante</div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
             persona = st.text_input("Solicitante*", max_chars=150)
@@ -160,62 +193,76 @@ def run_modulo_compatibilidad():
 
         direccion = st.text_input("Dirección*", max_chars=200)
 
-        st.subheader("Datos de la actividad")
-        giro = st.text_area("Uso comercial / giro*", height=60)
+        st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
-        # Ordenanzas (múltiple selección)
-        ordenanzas_sel = st.multiselect(
-            "Ordenanzas aplicables*",
-            ORDENANZAS,
-            default=["ORD. 2236-MML"],
+        # ---------------- Bloque: Datos de la actividad ----------------
+        st.markdown('<div class="section-title">Datos de la actividad</div>', unsafe_allow_html=True)
+
+        giro = st.text_area(
+            "Uso comercial / giro (texto general)*",
+            height=80,
+            placeholder="Ej: SERVICIO DE CONSULTORIOS ODONTOLÓGICOS",
         )
 
-        area = st.text_input("Área comercial (m²)*", max_chars=50)
+        col_ord, col_area = st.columns([2, 1])
+        with col_ord:
+            ordenanzas_sel = st.multiselect(
+                "Ordenanzas aplicables*",
+                ORDENANZAS,
+                default=["ORD. 2236-MML"],
+            )
+        with col_area:
+            area = st.text_input("Área comercial (m²)*", max_chars=50)
 
-        itse = st.selectbox(
-            "ITSE / Nivel de riesgo*",
-            [
-                "ITSE RIESGO MUY ALTO",
-                "ITSE RIESGO ALTO",
-                "ITSE RIESGO MEDIO",
-            ],
-        )
+        col_itse, col_cert, col_tipo = st.columns(3)
+        with col_itse:
+            itse = st.selectbox(
+                "ITSE / Nivel de riesgo*",
+                [
+                    "ITSE RIESGO MUY ALTO",
+                    "ITSE RIESGO ALTO",
+                    "ITSE RIESGO MEDIO",
+                ],
+            )
+        with col_cert:
+            certificador = st.selectbox(
+                "Certificador de riesgo*",
+                [
+                    "AMBROSIO BARRIOS P.",
+                    "SILVANO BELITO T.",
+                ],
+            )
+        with col_tipo:
+            tipo_licencia = st.selectbox(
+                "Tipo de licencia*",
+                [
+                    "LICENCIA DE FUNCIONAMIENTO INDETERMINADA",
+                    "LICENCIA DE FUNCIONAMIENTO TEMPORAL (01 AÑO)",
+                ],
+            )
 
-        certificador = st.selectbox(
-            "Certificador de riesgo*",
-            [
-                "AMBROSIO BARRIOS P.",
-                "SILVANO BELITO T.",
-            ],
-        )
+        st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
-        tipo_licencia = st.selectbox(
-            "Tipo de licencia*",
-            [
-                "LICENCIA DE FUNCIONAMIENTO INDETERMINADA",
-                "LICENCIA DE FUNCIONAMIENTO TEMPORAL (01 AÑO)",
-            ],
-        )
+        # ---------------- Bloque: Actividad general + zonificación ----------------
+        st.markdown('<div class="section-title">Actividad general y zonificación</div>', unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.subheader("Actividad específica y zonificación")
+        col_act1, col_act2 = st.columns([3, 1])
+        with col_act1:
+            actividad = st.text_input("Actividad general*", max_chars=200)
+        with col_act2:
+            codigo = st.text_input("Código de la actividad*", max_chars=50)
 
-        actividad = st.text_input("Actividad general*", max_chars=200)
-        codigo = st.text_input("Código de la actividad*", max_chars=50)
-
-        # Zonificación (código + descripción)
         zona_opciones = [f"{c} – {d}" for c, d in ZONAS]
         zona_sel = st.selectbox("Zonificación (código)*", zona_opciones)
         zona_codigo = zona_sel.split(" – ")[0]
         zona_desc = ZONAS_DICT.get(zona_codigo, "")
 
-        # Conformidad global (para el texto del informe, si lo usas)
-        conformidad = st.selectbox("Conformidad (global)*", ["SI", "NO"])
-        conf_si = "X" if conformidad == "SI" else ""
-        conf_no = "X" if conformidad == "NO" else ""
+        st.caption("En el Word se mostrará el código y su descripción (p. ej. CZ / COMERCIO ZONAL).")
 
-        # ---------- Giros que irán en la tabla ----------
-        st.markdown("### Giros de la tabla de compatibilidad")
+        st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
+
+        # ---------------- Bloque: Giros de la tabla ----------------
+        st.markdown('<div class="section-title">Giros de la tabla de compatibilidad</div>', unsafe_allow_html=True)
 
         actividades_tabla = []
         for i in range(n_giros_tabla):
@@ -252,19 +299,26 @@ def run_modulo_compatibilidad():
                 }
             )
 
-        st.markdown("---")
-        st.subheader("Datos de expediente y fecha")
+        st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
-        ds = st.text_input("N° de expediente / DS*", max_chars=20)
-        fecha_ds = st.date_input(
-            "Fecha del expediente",
-            value=date.today(),
-        )
+        # ---------------- Bloque: Datos de expediente y fecha ----------------
+        st.markdown('<div class="section-title">Datos de expediente y fecha</div>', unsafe_allow_html=True)
+
+        col_exp1, col_exp2 = st.columns([2, 1])
+        with col_exp1:
+            ds = st.text_input("N° de expediente / DS*", max_chars=20)
+        with col_exp2:
+            fecha_ds = st.date_input(
+                "Fecha del expediente",
+                value=date.today(),
+            )
+
         fecha_doc = st.date_input(
             "Fecha del documento",
             value=date.today(),
         )
 
+        st.markdown("")
         generar = st.form_submit_button("🧾 Generar compatibilidad (.docx)")
 
     st.markdown('</div>', unsafe_allow_html=True)
@@ -338,13 +392,10 @@ def run_modulo_compatibilidad():
         "actividad": to_upper(actividad),
         "codigo": codigo,
 
-        # Aquí van código y descripción de la zona
+        # Código y descripción de la zona
         # En Word puedes usar:
         #   {{zona}}
         #   {{zona_desc}}
-        # para obtener algo como:
-        #   CZ
-        #   COMERCIO ZONAL
         "zona": zona_codigo,
         "zona_desc": to_upper(zona_desc),
 
@@ -352,19 +403,15 @@ def run_modulo_compatibilidad():
         "fecha_ds": fecha_mes_abrev(fecha_ds),
         "fecha_actual": fmt_fecha_larga(fecha_doc),
 
-        "conf_si": conf_si,   # conformidad global (si la usas en el texto)
-        "conf_no": conf_no,
-
         # Lista de filas para la tabla:
-        # En Word:
         #   {% for fila in actividades_tabla %}
-        #      {{ fila.codigo }}  {{ fila.giro }}  {{zona}}  {{ fila.conf_si }} {{ fila.conf_no }}
+        #       {{ fila.codigo }} | {{ fila.giro }} | {{ zona }} | {{ fila.conf_si }} | {{ fila.conf_no }}
         #   {% endfor %}
         "actividades_tabla": actividades_tabla,
     }
 
     # Elegir plantilla según tipo de licencia
-    if "INDETERMINADA" in tipo_licencia:
+    if "LICENCIA DE FUNCIONAMIENTO INDETERMINADA" in tipo_licencia:
         tpl_path = TPL_COMP_INDETERMINADA
     else:
         tpl_path = TPL_COMP_TEMPORAL
