@@ -14,20 +14,19 @@ from google.oauth2.service_account import Credentials
 from utils import fecha_larga, safe_filename_pretty  # función común en utils.py
 
 # ============================================================================
-# CONFIGURACIÓN GOOGLE SHEETS
+# CONFIGURACIÓN GOOGLE SHEETS (USANDO STREAMLIT SECRETS)
 # ============================================================================
 
-# Ruta del JSON de la cuenta de servicio (ajusta según tu estructura de carpetas)
-SERVICE_ACCOUNT_FILE = "credenciales/anuncios-service-account.json"
-
 # ID de tu Google Sheets (lo sacas de la URL: .../spreadsheets/d/TU_ID/edit)
-SPREADSHEET_ID = "1wytMZVt4dH33uKvCwgeSp48F3C79Cshf2wCY09NxVqw"  # <-- REEMPLAZA ESTO
+SPREADSHEET_ID = "1wytMZVt4dH33uKvCwgeSp48F3C79Cshf2wCY09NxVqw"
 
-# Nombre de la hoja dentro del spreadsheet (p.ej. "Hoja 1")
+# Nombre de la hoja dentro del spreadsheet
 SHEET_NAME = "Hoja 1"
 
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
 
 # Columnas exactamente como en el formato oficial
 COLUMNAS_OFICIALES = [
@@ -59,6 +58,7 @@ COLUMNAS_OFICIALES = [
     "N° CARAS",
 ]
 
+
 # ============================================================================
 # HELPERS GOOGLE SHEETS
 # ============================================================================
@@ -67,20 +67,25 @@ COLUMNAS_OFICIALES = [
 @st.cache_resource
 def get_worksheet():
     """
-    Crea el cliente de Google Sheets y devuelve la hoja de trabajo.
+    Crea el cliente de Google Sheets usando st.secrets y devuelve la hoja de trabajo.
     Se cachea para no reautenticar en cada interacción.
     """
-    creds = Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=SCOPES,
-    )
+    creds_info = st.secrets["gcp_service_account"]
+    creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
     client = gspread.authorize(creds)
+
     sh = client.open_by_key(SPREADSHEET_ID)
     try:
         ws = sh.worksheet(SHEET_NAME)
     except gspread.exceptions.WorksheetNotFound:
         # Si no existe la hoja con ese nombre, usamos la primera
         ws = sh.sheet1
+
+    # Si la hoja está vacía, ponemos la fila de encabezados
+    values = ws.get_all_values()
+    if not values:
+        ws.update("A1", [COLUMNAS_OFICIALES])
+
     return ws
 
 
@@ -115,15 +120,18 @@ def escribir_bd_certificados(df: pd.DataFrame):
     """
     ws = get_worksheet()
 
-    # Llevamos el DF a lista de listas: primera fila = encabezados
     df = df.copy()
-    df = df[COLUMNAS_OFICIALES]  # aseguramos orden
+    # Aseguramos columnas y orden
+    for col in COLUMNAS_OFICIALES:
+        if col not in df.columns:
+            df[col] = ""
+    df = df[COLUMNAS_OFICIALES]
     df = df.fillna("")
 
     values = [df.columns.tolist()] + df.astype(str).values.tolist()
 
     ws.clear()
-    ws.update(values)
+    ws.update("A1", values)
 
 
 # ============================================================================
@@ -793,7 +801,7 @@ def run_modulo_anuncios():
             "Cuando guardes un certificado, se empezará a llenar."
         )
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
