@@ -9,3 +9,6 @@ __pycache__/
 
 # Streamlit local
 .streamlit/
+# No subir credenciales
+credenciales/
+*.json
