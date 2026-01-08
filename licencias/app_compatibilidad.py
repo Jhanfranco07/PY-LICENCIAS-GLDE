@@ -108,6 +108,47 @@ def render_doc(context: dict, filename_stem: str, plantilla_path: str):
     )
 
 
+# -------------------- Callbacks (autocompletar) --------------------
+
+def _set_flash(kind: str, text: str):
+    st.session_state["_flash_kind"] = kind
+    st.session_state["_flash_text"] = text
+
+
+def _autocompletar_con_dni():
+    st.session_state["_last_action"] = "dni"
+    try:
+        dni = (st.session_state.get("dni") or "").strip()
+        res = consultar_dni(dni)
+        nombre = (dni_a_nombre_completo(res) or "").strip()
+        if not nombre:
+            _set_flash("warning", "RENIEC respondió, pero no llegó el nombre.")
+            return
+        st.session_state["persona"] = nombre
+        _set_flash("success", "Solicitante actualizado con RENIEC (DNI).")
+    except (ValueError, CodartAPIError) as e:
+        _set_flash("error", str(e))
+    except Exception as e:
+        _set_flash("error", f"Error inesperado consultando DNI: {e}")
+
+
+def _autocompletar_con_ruc():
+    st.session_state["_last_action"] = "ruc"
+    try:
+        ruc = (st.session_state.get("ruc") or "").strip()
+        res = consultar_ruc(ruc)
+        razon = (res.get("razon_social") or "").strip()
+        if not razon:
+            _set_flash("warning", "SUNAT respondió, pero no llegó la razón social.")
+            return
+        st.session_state["persona"] = razon
+        _set_flash("success", "Solicitante actualizado con SUNAT (RUC).")
+    except (ValueError, CodartAPIError) as e:
+        _set_flash("error", str(e))
+    except Exception as e:
+        _set_flash("error", f"Error inesperado consultando RUC: {e}")
+
+
 # -------------------- Módulo principal --------------------
 
 def run_modulo_compatibilidad():
@@ -120,10 +161,13 @@ def run_modulo_compatibilidad():
     TPL_COMP_INDETERMINADA = "plantilla_compa/compatibilidad_indeterminada.docx"
     TPL_COMP_TEMPORAL = "plantilla_compa/compatibilidad_temporal.docx"
 
-    # --- Session State defaults (para autocompletar solicitante) ---
+    # Defaults
     st.session_state.setdefault("persona", "")
     st.session_state.setdefault("dni", "")
     st.session_state.setdefault("ruc", "")
+    st.session_state.setdefault("_flash_kind", "")
+    st.session_state.setdefault("_flash_text", "")
+    st.session_state.setdefault("_last_action", "")
 
     # Estilos visuales
     st.markdown(
@@ -158,6 +202,22 @@ def run_modulo_compatibilidad():
         """,
         unsafe_allow_html=True,
     )
+
+    # Flash message (si hubo autocompletar)
+    if st.session_state.get("_flash_text"):
+        kind = st.session_state.get("_flash_kind", "")
+        txt = st.session_state.get("_flash_text", "")
+        if kind == "success":
+            st.success(txt)
+        elif kind == "warning":
+            st.warning(txt)
+        elif kind == "error":
+            st.error(txt)
+        else:
+            st.info(txt)
+        # limpiar para que no se repita siempre
+        st.session_state["_flash_kind"] = ""
+        st.session_state["_flash_text"] = ""
 
     # ---------- Control de Nº de giros (fuera del form) ----------
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -199,25 +259,28 @@ def run_modulo_compatibilidad():
             '<div class="section-title">Datos del solicitante</div>',
             unsafe_allow_html=True,
         )
+
         c1, c2 = st.columns(2)
         with c1:
-            persona = st.text_input("Solicitante*", max_chars=150, key="persona")
-            dni = st.text_input("DNI (si es persona natural)", max_chars=8, key="dni")
+            st.text_input("Solicitante*", max_chars=150, key="persona")
+            st.text_input("DNI (si es persona natural)", max_chars=8, key="dni")
         with c2:
-            ruc = st.text_input("RUC (si es persona jurídica)", max_chars=11, key="ruc")
+            st.text_input("RUC (si es persona jurídica)", max_chars=11, key="ruc")
             nom_comercio = st.text_input("Nombre comercial (opcional)")
 
-        # Botones de autocompletar (dentro del form)
+        # Botones: usan callback (NO rompe session_state)
         b1, b2 = st.columns(2)
         with b1:
-            buscar_dni = st.form_submit_button(
+            st.form_submit_button(
                 "⚡ Autocompletar solicitante con DNI",
-                use_container_width=True
+                use_container_width=True,
+                on_click=_autocompletar_con_dni,
             )
         with b2:
-            buscar_ruc = st.form_submit_button(
+            st.form_submit_button(
                 "⚡ Autocompletar solicitante con RUC",
-                use_container_width=True
+                use_container_width=True,
+                on_click=_autocompletar_con_ruc,
             )
 
         direccion = st.text_input("Dirección*", max_chars=200)
@@ -357,44 +420,14 @@ def run_modulo_compatibilidad():
         st.markdown("")
         generar = st.form_submit_button("🧾 Generar compatibilidad (.docx)")
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # -------- Autocompletar (si se presionó alguno de los botones) --------
-    if buscar_dni:
-        try:
-            with st.spinner("Consultando DNI..."):
-                res = consultar_dni(st.session_state["dni"])
-                nombre = dni_a_nombre_completo(res) or ""
-                if nombre.strip():
-                    st.session_state["persona"] = nombre.strip()
-                    st.success("Solicitante actualizado con RENIEC.")
-                else:
-                    st.warning("No se pudo obtener el nombre desde RENIEC.")
-        except (ValueError, CodartAPIError) as e:
-            st.error(str(e))
-        except Exception as e:
-            st.error("Error inesperado consultando DNI")
-            st.exception(e)
-        st.stop()  # para que NO continúe a generar en este mismo submit
-
-    if buscar_ruc:
-        try:
-            with st.spinner("Consultando RUC..."):
-                res = consultar_ruc(st.session_state["ruc"])
-                razon = (res.get("razon_social") or "").strip()
-                if razon:
-                    st.session_state["persona"] = razon
-                    st.success("Solicitante actualizado con SUNAT.")
-                else:
-                    st.warning("No se pudo obtener la razón social desde SUNAT.")
-        except (ValueError, CodartAPIError) as e:
-            st.error(str(e))
-        except Exception as e:
-            st.error("Error inesperado consultando RUC")
-            st.exception(e)
+    # Si el submit fue por autocompletar, NO generamos (evita consumir lógica y errores)
+    if st.session_state.get("_last_action") in ("dni", "ruc"):
+        st.session_state["_last_action"] = ""
         st.stop()
 
-    # Si todavía no se envía el formulario con "Generar", no hacemos nada
+    # Si no se presionó generar, salir
     if not generar:
         return
 
@@ -406,6 +439,10 @@ def run_modulo_compatibilidad():
     tipo_licencia = tipo_licencia_map.get(tipo_licencia_simple, "")
 
     # --------- Validaciones básicas ---------
+    persona = (st.session_state.get("persona") or "").strip()
+    dni = (st.session_state.get("dni") or "").strip()
+    ruc = (st.session_state.get("ruc") or "").strip()
+
     faltantes = []
     for key, val in {
         "n_compa": n_compa,
@@ -436,8 +473,8 @@ def run_modulo_compatibilidad():
         return
 
     # DNI / RUC con “--------------------” cuando falte
-    dni_val = (dni or "").strip()
-    ruc_val = (ruc or "").strip()
+    dni_val = dni
+    ruc_val = ruc
     if dni_val and not ruc_val:
         ruc_val = "--------------------"
     elif ruc_val and not dni_val:
@@ -453,7 +490,7 @@ def run_modulo_compatibilidad():
 
     # --------- Contexto para la plantilla ---------
     ctx = {
-        "n_compa": n_compa,                     # N° {{n_compa}}-2026-MDP-GLDE
+        "n_compa": n_compa,
         "persona": to_upper(persona),
         "dni": dni_val,
         "ruc": ruc_val,
@@ -470,8 +507,7 @@ def run_modulo_compatibilidad():
         "actividad": to_upper(actividad),
         "codigo": codigo,
 
-        # Código y descripción de la zona
-        # En Word: {{zona}} / {{zona_desc}}
+        "zonaona": zona_codigo,  # (si tu plantilla usa {{zona}} mejor usa la clave "zona")
         "zona": zona_codigo,
         "zona_desc": to_upper(zona_desc),
 
@@ -479,17 +515,15 @@ def run_modulo_compatibilidad():
         "fecha_ds": fecha_mes_abrev(fecha_ds),
         "fecha_actual": fmt_fecha_larga(fecha_doc),
 
-        # Lista de filas para la tabla (loop en Word)
         "actividades_tabla": actividades_tabla,
     }
 
-    # Elegir plantilla según tipo de licencia (ya con texto completo)
+    # Elegir plantilla según tipo de licencia
     if "LICENCIA DE FUNCIONAMIENTO INDETERMINADA" in tipo_licencia:
         tpl_path = TPL_COMP_INDETERMINADA
     else:
         tpl_path = TPL_COMP_TEMPORAL
 
-    # Nombre del archivo: {{n_compa}} - 2026 - {{persona}}
     base_name = f"{n_compa} - 2026 - {to_upper(persona)}"
     render_doc(ctx, base_name, tpl_path)
 
