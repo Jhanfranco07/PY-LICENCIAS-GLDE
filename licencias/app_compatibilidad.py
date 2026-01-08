@@ -7,6 +7,13 @@ from datetime import date
 import streamlit as st
 from docxtpl import DocxTemplate
 
+from integraciones.codart import (
+    CodartAPIError,
+    consultar_dni,
+    consultar_ruc,
+    dni_a_nombre_completo,
+)
+
 from utils import (
     asegurar_dirs,
     fmt_fecha_larga,
@@ -113,6 +120,11 @@ def run_modulo_compatibilidad():
     TPL_COMP_INDETERMINADA = "plantilla_compa/compatibilidad_indeterminada.docx"
     TPL_COMP_TEMPORAL = "plantilla_compa/compatibilidad_temporal.docx"
 
+    # --- Session State defaults (para autocompletar solicitante) ---
+    st.session_state.setdefault("persona", "")
+    st.session_state.setdefault("dni", "")
+    st.session_state.setdefault("ruc", "")
+
     # Estilos visuales
     st.markdown(
         """
@@ -189,11 +201,24 @@ def run_modulo_compatibilidad():
         )
         c1, c2 = st.columns(2)
         with c1:
-            persona = st.text_input("Solicitante*", max_chars=150)
-            dni = st.text_input("DNI (si es persona natural)", max_chars=8)
+            persona = st.text_input("Solicitante*", max_chars=150, key="persona")
+            dni = st.text_input("DNI (si es persona natural)", max_chars=8, key="dni")
         with c2:
-            ruc = st.text_input("RUC (si es persona jurídica)", max_chars=11)
+            ruc = st.text_input("RUC (si es persona jurídica)", max_chars=11, key="ruc")
             nom_comercio = st.text_input("Nombre comercial (opcional)")
+
+        # Botones de autocompletar (dentro del form)
+        b1, b2 = st.columns(2)
+        with b1:
+            buscar_dni = st.form_submit_button(
+                "⚡ Autocompletar solicitante con DNI",
+                use_container_width=True
+            )
+        with b2:
+            buscar_ruc = st.form_submit_button(
+                "⚡ Autocompletar solicitante con RUC",
+                use_container_width=True
+            )
 
         direccion = st.text_input("Dirección*", max_chars=200)
 
@@ -240,7 +265,6 @@ def run_modulo_compatibilidad():
                 ],
             )
         with col_tipo:
-            # opciones cortas para el usuario
             tipo_licencia_simple = st.selectbox(
                 "Tipo de licencia*",
                 ["INDETERMINADA", "TEMPORAL"],
@@ -265,7 +289,6 @@ def run_modulo_compatibilidad():
         zona_codigo = zona_sel.split(" – ")[0]
         zona_desc = ZONAS_DICT.get(zona_codigo, "")
 
-        
         st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
         # ---------------- Giros de la tabla ----------------
@@ -336,7 +359,42 @@ def run_modulo_compatibilidad():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # Si todavía no se envía el formulario, no generamos nada
+    # -------- Autocompletar (si se presionó alguno de los botones) --------
+    if buscar_dni:
+        try:
+            with st.spinner("Consultando DNI..."):
+                res = consultar_dni(st.session_state["dni"])
+                nombre = dni_a_nombre_completo(res) or ""
+                if nombre.strip():
+                    st.session_state["persona"] = nombre.strip()
+                    st.success("Solicitante actualizado con RENIEC.")
+                else:
+                    st.warning("No se pudo obtener el nombre desde RENIEC.")
+        except (ValueError, CodartAPIError) as e:
+            st.error(str(e))
+        except Exception as e:
+            st.error("Error inesperado consultando DNI")
+            st.exception(e)
+        st.stop()  # para que NO continúe a generar en este mismo submit
+
+    if buscar_ruc:
+        try:
+            with st.spinner("Consultando RUC..."):
+                res = consultar_ruc(st.session_state["ruc"])
+                razon = (res.get("razon_social") or "").strip()
+                if razon:
+                    st.session_state["persona"] = razon
+                    st.success("Solicitante actualizado con SUNAT.")
+                else:
+                    st.warning("No se pudo obtener la razón social desde SUNAT.")
+        except (ValueError, CodartAPIError) as e:
+            st.error(str(e))
+        except Exception as e:
+            st.error("Error inesperado consultando RUC")
+            st.exception(e)
+        st.stop()
+
+    # Si todavía no se envía el formulario con "Generar", no hacemos nada
     if not generar:
         return
 
@@ -378,8 +436,8 @@ def run_modulo_compatibilidad():
         return
 
     # DNI / RUC con “--------------------” cuando falte
-    dni_val = dni.strip()
-    ruc_val = ruc.strip()
+    dni_val = (dni or "").strip()
+    ruc_val = (ruc or "").strip()
     if dni_val and not ruc_val:
         ruc_val = "--------------------"
     elif ruc_val and not dni_val:
@@ -389,7 +447,7 @@ def run_modulo_compatibilidad():
         ruc_val = "--------------------"
 
     # Nombre comercial vacío
-    nom_com_val = nom_comercio.strip() or "--------------------"
+    nom_com_val = (nom_comercio or "").strip() or "--------------------"
 
     ordenanza_texto = ", ".join(ordenanzas_sel)
 
@@ -413,8 +471,7 @@ def run_modulo_compatibilidad():
         "codigo": codigo,
 
         # Código y descripción de la zona
-        # En Word:
-        #   {{zona}} / {{zona_desc}}
+        # En Word: {{zona}} / {{zona_desc}}
         "zona": zona_codigo,
         "zona_desc": to_upper(zona_desc),
 
@@ -422,10 +479,7 @@ def run_modulo_compatibilidad():
         "fecha_ds": fecha_mes_abrev(fecha_ds),
         "fecha_actual": fmt_fecha_larga(fecha_doc),
 
-        # Lista de filas para la tabla:
-        #   {% for fila in actividades_tabla %}
-        #       {{ fila.codigo }} | {{ fila.giro }} | {{ zona }} | {{ fila.conf_si }} | {{ fila.conf_no }}
-        #   {% endfor %}
+        # Lista de filas para la tabla (loop en Word)
         "actividades_tabla": actividades_tabla,
     }
 
