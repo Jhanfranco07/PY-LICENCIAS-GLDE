@@ -173,14 +173,18 @@ def consultar_ruc(ruc: str) -> Dict[str, Any]:
 
 
 def dni_a_nombre_completo(res: Dict[str, Any]) -> str:
-    """Arma nombre completo a partir del resultado RENIEC. Prioriza full_name."""
-    full = (res.get("full_name") or "").strip()
-    if full:
+    """
+    Arma nombre completo con el orden:
+      NOMBRES APELLIDO_PATERNO APELLIDO_MATERNO
+    """
+    nombres = (res.get("first_name") or "").strip()
+    ape1 = (res.get("first_last_name") or "").strip()
+    ape2 = (res.get("second_last_name") or "").strip()
+
+    # Si viene todo vacío, intenta fallback con full_name (por si cambia la API)
+    if not (nombres or ape1 or ape2):
+        full = (res.get("full_name") or "").strip()
         return full
 
-    parts = [
-        (res.get("first_last_name") or "").strip(),
-        (res.get("second_last_name") or "").strip(),
-        (res.get("first_name") or "").strip(),
-    ]
-    return " ".join([p for p in parts if p]).strip()
+    return " ".join([p for p in [nombres, ape1, ape2] if p]).upper().strip()
+
