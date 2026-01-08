@@ -440,7 +440,7 @@ def run_modulo_anuncios():
             max_chars=11,
             key="ruc_sol",
             on_change=_cb_autocomplete_ruc,  # ✅ autocomplete SUNAT
-            placeholder="Ej: 10xxxxxxxxx / 20xxxxxxxxx",
+            placeholder="Digita el ruc",
         )
 
     msg = (st.session_state.get("anuncio_lookup_msg") or "").strip()
