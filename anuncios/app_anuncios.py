@@ -13,6 +13,10 @@ from google.oauth2.service_account import Credentials
 
 from utils import fecha_larga, safe_filename_pretty  # función común en utils.py
 
+# ✅ CODART (SUNAT) para autocompletar
+from integraciones.codart import CodartAPIError, consultar_ruc
+
+
 # ============================================================================
 # CONFIGURACIÓN GOOGLE SHEETS (USANDO STREAMLIT SECRETS)
 # ============================================================================
@@ -62,7 +66,6 @@ COLUMNAS_OFICIALES = [
 # ============================================================================
 # HELPERS GOOGLE SHEETS
 # ============================================================================
-
 
 @st.cache_resource
 def get_worksheet():
@@ -137,7 +140,6 @@ def escribir_bd_certificados(df: pd.DataFrame):
 # ============================================================================
 # Helpers para la BD (con la lógica de nombres / apellidos)
 # ============================================================================
-
 
 def split_nombre_apellidos(nombre_raw: str):
     """
@@ -252,12 +254,77 @@ def guardar_certificado_en_bd(
 
 
 # ============================================================================
+# ✅ AUTOCOMPLETE (SUNAT) + STATE
+# ============================================================================
+
+def _init_anuncios_state():
+    st.session_state.setdefault("tipo_ruc_radio", "RUC 10 – Persona natural")
+    st.session_state.setdefault("nombre_sol", "")
+    st.session_state.setdefault("ruc_sol", "")
+    st.session_state.setdefault("representante_sol", "")
+    st.session_state.setdefault("direccion_sol", "")
+    st.session_state.setdefault("anuncio_lookup_msg", "")
+
+
+def _extract_razon_social(res: dict) -> str:
+    # Si viene anidado en "result", úsalo
+    data = res.get("result") if isinstance(res, dict) else None
+    if not isinstance(data, dict):
+        data = res if isinstance(res, dict) else {}
+
+    # Tu caso exacto: result.razon_social
+    return (
+        (data.get("razon_social") or "").strip()
+        or (data.get("razonSocial") or "").strip()
+        or (data.get("nombre_razon_social") or "").strip()
+        or (data.get("nombreRazonSocial") or "").strip()
+        or (data.get("nombre") or "").strip()
+        or (data.get("full_name") or "").strip()
+    )
+
+
+
+def _cb_autocomplete_ruc():
+    ruc = (st.session_state.get("ruc_sol") or "").strip()
+    st.session_state["anuncio_lookup_msg"] = ""
+
+    if not ruc:
+        return
+
+    if not (ruc.isdigit() and len(ruc) == 11):
+        st.session_state["anuncio_lookup_msg"] = "⚠️ RUC inválido (debe tener 11 dígitos)."
+        return
+
+    try:
+        res = consultar_ruc(ruc)
+        razon = _extract_razon_social(res)
+
+        if razon:
+            st.session_state["nombre_sol"] = razon
+            # mensaje “bonito”
+            if ruc.startswith("10"):
+                st.session_state["anuncio_lookup_msg"] = "✅ RUC 10 OK: nombre autocompletado."
+            elif ruc.startswith("20"):
+                st.session_state["anuncio_lookup_msg"] = "✅ RUC 20 OK: razón social autocompletada."
+            else:
+                st.session_state["anuncio_lookup_msg"] = "✅ RUC OK: solicitante autocompletado."
+        else:
+            st.session_state["anuncio_lookup_msg"] = "⚠️ RUC OK, pero no vino razón social/nombre."
+
+    except (ValueError, CodartAPIError) as e:
+        st.session_state["anuncio_lookup_msg"] = f"⚠️ {e}"
+    except Exception as e:
+        st.session_state["anuncio_lookup_msg"] = f"⚠️ Error inesperado consultando RUC: {e}"
+
+
+# ============================================================================
 # Módulo principal (Streamlit)
 # ============================================================================
 
-
 def run_modulo_anuncios():
     st.header("📢 Anuncios Publicitarios – Evaluación y Certificado")
+
+    _init_anuncios_state()
 
     # Estilos visuales tipo card
     st.markdown(
@@ -325,6 +392,67 @@ def run_modulo_anuncios():
     st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
     # ------------------------------------------------------------------ #
+    # ✅ DATOS DEL SOLICITANTE (FUERA DEL FORM PARA SER DINÁMICO)        #
+    # ------------------------------------------------------------------ #
+    st.markdown(
+        '<div class="section-title">Datos del solicitante</div>',
+        unsafe_allow_html=True,
+    )
+
+    tipo_ruc_label = st.radio(
+        "Tipo de contribuyente",
+        ["RUC 10 – Persona natural", "RUC 20 – Persona jurídica"],
+        index=0 if st.session_state["tipo_ruc_radio"].startswith("RUC 10") else 1,
+        horizontal=True,
+        key="tipo_ruc_radio",
+    )
+    es_ruc20 = tipo_ruc_label.startswith("RUC 20")
+    tipo_ruc = "20" if es_ruc20 else "10"
+
+    col1, col2 = st.columns(2)
+    with col1:
+        nombre = st.text_input(
+            "Solicitante (nombre completo o razón social)",
+            max_chars=150,
+            key="nombre_sol",
+        )
+
+        # ✅ Ahora sí aparece inmediatamente al cambiar a RUC 20
+        if es_ruc20:
+            representante = st.text_input(
+                "Representante legal (solo RUC 20)",
+                max_chars=150,
+                key="representante_sol",
+                placeholder="Nombre completo del representante",
+            )
+        else:
+            representante = ""
+
+        direccion = st.text_input(
+            "Dirección del solicitante",
+            max_chars=200,
+            key="direccion_sol",
+        )
+
+    with col2:
+        ruc = st.text_input(
+            "RUC",
+            max_chars=11,
+            key="ruc_sol",
+            on_change=_cb_autocomplete_ruc,  # ✅ autocomplete SUNAT
+            placeholder="Ej: 10xxxxxxxxx / 20xxxxxxxxx",
+        )
+
+    msg = (st.session_state.get("anuncio_lookup_msg") or "").strip()
+    if msg:
+        if msg.startswith("✅"):
+            st.success(msg)
+        else:
+            st.warning(msg)
+
+    st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
+
+    # ------------------------------------------------------------------ #
     #                         MÓDULO 1 · EVALUACIÓN                      #
     # ------------------------------------------------------------------ #
     with st.form("form_evaluacion"):
@@ -345,51 +473,6 @@ def run_modulo_anuncios():
 
         grosor = 0.0
         altura_extra = 0.0
-
-        # ---------------- Datos del solicitante ----------------
-        st.markdown(
-            '<div class="section-title">Datos del solicitante</div>',
-            unsafe_allow_html=True,
-        )
-
-        tipo_ruc_label = st.radio(
-            "Tipo de contribuyente",
-            ["RUC 10 – Persona natural", "RUC 20 – Persona jurídica"],
-            index=0,
-            horizontal=True,
-            key="tipo_ruc_radio",
-        )
-        es_ruc20 = tipo_ruc_label.startswith("RUC 20")
-        tipo_ruc = "20" if es_ruc20 else "10"
-
-        col1, col2 = st.columns(2)
-        with col1:
-            nombre = st.text_input(
-                "Solicitante (nombre completo o razón social)",
-                max_chars=150,
-                key="nombre_sol",
-            )
-
-            if es_ruc20:
-                representante = st.text_input(
-                    "Representante legal (solo RUC 20)",
-                    max_chars=150,
-                    key="representante_sol",
-                    placeholder="Nombre completo del representante",
-                )
-            else:
-                representante = ""
-
-            direccion = st.text_input(
-                "Dirección del solicitante",
-                max_chars=200,
-                key="direccion_sol",
-            )
-
-        with col2:
-            ruc = st.text_input("RUC", max_chars=15, key="ruc_sol")
-
-        st.markdown('<hr class="section-divider" />', unsafe_allow_html=True)
 
         # ---------------- Datos del anuncio ----------------
         st.markdown(
@@ -463,6 +546,16 @@ def run_modulo_anuncios():
 
     # ---------- GENERACIÓN DEL WORD (EVALUACIÓN) ----------
     if generar_eval:
+        # refrescamos valores desde session_state (por seguridad)
+        tipo_ruc_label = st.session_state.get("tipo_ruc_radio", "RUC 10 – Persona natural")
+        es_ruc20 = tipo_ruc_label.startswith("RUC 20")
+        tipo_ruc = "20" if es_ruc20 else "10"
+
+        nombre = (st.session_state.get("nombre_sol") or "").strip()
+        ruc = (st.session_state.get("ruc_sol") or "").strip()
+        direccion = (st.session_state.get("direccion_sol") or "").strip()
+        representante = (st.session_state.get("representante_sol") or "").strip() if es_ruc20 else ""
+
         if not nombre or not n_anuncio or not num_ds:
             st.error("Completa al menos: Solicitante, N° de anuncio y N° de expediente.")
         else:
@@ -491,7 +584,7 @@ def run_modulo_anuncios():
                 # Extra para registro / BD
                 "tipo_ruc": tipo_ruc,
                 "tipo_ruc_label": tipo_ruc_label,
-                "representante": representante,
+                "representante": representante,  # ✅ se guarda para BD cuando sea RUC 20
             }
 
             st.session_state["anuncio_eval_ctx"] = contexto_eval
