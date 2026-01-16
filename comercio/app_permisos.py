@@ -5,18 +5,54 @@ from docxtpl import DocxTemplate
 import pandas as pd
 import io, os
 
+# ========= Catálogo de Rubros (puedes editarlo si cambia la ordenanza) =========
+# label       -> lo que se muestra en el select
+# rubro_num   -> número de rubro (1, 2, 3, 4, 5)
+# codigo      -> código G de la ordenanza (001, 002, ...)
+RUBROS_CODIGOS = [
+    # Rubro 1 - productos de origen industrial
+    ("Rubro 1.a - Golosinas y afines (CÓDIGO G 001)", "1", "001"),
+    # Rubro 2 - productos perecibles
+    ("Rubro 2.a - Venta de frutas o verduras (CÓDIGO G 002)", "2", "002"),
+    ("Rubro 2.b - Productos naturales con registro sanitario (CÓDIGO G 003)", "2", "003"),
+    # Rubro 3 - productos preparados al día
+    ("Rubro 3.a - Bebidas saludables (emoliente, quinua, maca, soya) (CÓDIGO G 004)", "3", "004"),
+    ("Rubro 3.b - Potajes tradicionales (CÓDIGO G 005)", "3", "005"),
+    ("Rubro 3.c - Dulces tradicionales (CÓDIGO G 006)", "3", "006"),
+    ("Rubro 3.d - Sándwiches (CÓDIGO G 007)", "3", "007"),
+    ("Rubro 3.e - Jugo de naranja y similares (CÓDIGO G 008)", "3", "008"),
+    ("Rubro 3.f - Canchitas, confitería y similares (CÓDIGO G 009)", "3", "009"),
+    # Rubro 4 - objetos de uso duradero
+    ("Rubro 4.a - Mercería, bazar y útiles de escritorio (CÓDIGO G 010)", "4", "010"),
+    ("Rubro 4.b - Diarios, revistas, libros y loterías (CÓDIGO G 011)", "4", "011"),
+    ("Rubro 4.c - Monedas y estampillas (CÓDIGO G 012)", "4", "012"),
+    ("Rubro 4.d - Artesanías (CÓDIGO G 013)", "4", "013"),
+    ("Rubro 4.e - Artículos religiosos (CÓDIGO G 014)", "4", "014"),
+    ("Rubro 4.f - Artículos de limpieza (CÓDIGO G 015)", "4", "015"),
+    ("Rubro 4.g - Pilas y relojes (CÓDIGO G 016)", "4", "016"),
+    # Rubro 5 - servicios
+    ("Rubro 5.a - Duplicado de llaves / cerrajería (CÓDIGO G 017)", "5", "017"),
+    ("Rubro 5.b - Lustrador de calzado (CÓDIGO G 018)", "5", "018"),
+    ("Rubro 5.c - Artistas plásticos y retratistas (CÓDIGO G 019)", "5", "019"),
+    ("Rubro 5.d - Fotografías (CÓDIGO G 020)", "5", "020"),
+]
+
+
 # ========= Utils locales =========
 def asegurar_dirs():
     os.makedirs("salidas", exist_ok=True)
     os.makedirs("plantillas", exist_ok=True)
 
+
 def safe_filename_pretty(texto: str) -> str:
     prohibidos = '<>:"/\\|?*'
-    limpio = ''.join('_' if c in prohibidos else c for c in str(texto))
-    return limpio.replace('\n',' ').replace('\r',' ').strip()
+    limpio = "".join("_" if c in prohibidos else c for c in str(texto))
+    return limpio.replace("\n", " ").replace("\r", " ").strip()
+
 
 def to_upper(s: str) -> str:
     return (s or "").strip().upper()
+
 
 def fmt_fecha_corta(d) -> str:
     try:
@@ -24,10 +60,21 @@ def fmt_fecha_corta(d) -> str:
     except Exception:
         return ""
 
+
 def fmt_fecha_larga(d) -> str:
     meses = [
-        "enero","febrero","marzo","abril","mayo","junio",
-        "julio","agosto","setiembre","octubre","noviembre","diciembre"
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "setiembre",
+        "octubre",
+        "noviembre",
+        "diciembre",
     ]
     try:
         dt = pd.to_datetime(d)
@@ -35,19 +82,23 @@ def fmt_fecha_larga(d) -> str:
     except Exception:
         return ""
 
+
 def fmt_fecha_larga_de(d) -> str:
     t = fmt_fecha_larga(d)
     return t.replace(" del ", " de ") if t else t
+
 
 def build_vigencia(fi, ff) -> str:
     ini = fmt_fecha_larga_de(fi)
     fin = fmt_fecha_larga_de(ff)
     return f"{ini} hasta el {fin}" if ini and fin else ""
 
+
 def build_vigencia2(fi, ff) -> str:
     i = fmt_fecha_corta(fi)
     f = fmt_fecha_corta(ff)
     return f"{i} - {f}" if i and f else ""
+
 
 def render_doc(context: dict, filename_stem: str, plantilla_path: str):
     if not os.path.exists(plantilla_path):
@@ -69,12 +120,14 @@ def render_doc(context: dict, filename_stem: str, plantilla_path: str):
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 
+
 def genero_labels(sexo: str):
     return (
         ("la señora", "la administrada", "identificada", "Sra")
         if sexo == "Femenino"
         else ("el señor", "el administrado", "identificado", "Sr")
     )
+
 
 # ========= MÓDULO COMPLETO: evaluación + resolución + certificado =========
 def run_permisos_comercio():
@@ -194,6 +247,33 @@ def run_permisos_comercio():
         key="giro",
         value=st.session_state.get("giro", ""),
     )
+
+    # ---- Selección de Rubro (rubro + código) ----
+    rubro_labels = [item[0] for item in RUBROS_CODIGOS]
+    rubro_label_default = st.session_state.get("rubro_label", rubro_labels[0])
+    try:
+        rubro_index = rubro_labels.index(rubro_label_default)
+    except ValueError:
+        rubro_index = 0
+
+    rubro_label = st.selectbox(
+        "Rubro según Ordenanza (para 'rubro' y 'código')*",
+        rubro_labels,
+        index=rubro_index,
+        key="rubro_label_select",
+    )
+    st.session_state["rubro_label"] = rubro_label
+
+    rubro_num = ""
+    codigo_rubro = ""
+    for label, r_num, cod in RUBROS_CODIGOS:
+        if label == rubro_label:
+            rubro_num = r_num
+            codigo_rubro = cod
+            break
+
+    st.caption(f"Se usará el rubro {rubro_num} con el código {codigo_rubro}.")
+
     ubicacion = st.text_input(
         "Ubicación*",
         key="ubicacion",
@@ -243,6 +323,7 @@ def run_permisos_comercio():
             "domicilio": domicilio,
             "giro": giro,
             "ubicacion": ubicacion,
+            "rubro": rubro_label,
         }
         for k, v in req.items():
             if not isinstance(v, str) or not v.strip():
@@ -271,8 +352,14 @@ def run_permisos_comercio():
                 "horario": horario_eval.strip(),
                 "tiempo": int(tiempo_num),
                 "plazo": plazo_unidad,
+                # raw dates para reutilizar
                 "fecha_ingreso_raw": str(fecha_ingreso) if fecha_ingreso else "",
-                "fecha_evaluacion_raw": str(fecha_evaluacion) if fecha_evaluacion else "",
+                "fecha_evaluacion_raw": str(fecha_evaluacion)
+                if fecha_evaluacion
+                else "",
+                # rubro + código
+                "rubro": str(rubro_num),
+                "codigo_rubro": str(codigo_rubro),
             }
             st.session_state["eval_ctx"] = ctx_eval
             anio_eval = pd.to_datetime(fecha_evaluacion).year
@@ -364,6 +451,10 @@ def run_permisos_comercio():
                 "Horario": eva.get("horario", ""),
                 "Código de Evaluación": eva.get("cod_evaluacion", ""),
                 "Fecha de Evaluación": eva.get("fecha_evaluacion", ""),
+                "Tiempo": eva.get("tiempo", ""),
+                "Plazo": eva.get("plazo", ""),
+                "Rubro": eva.get("rubro", ""),
+                "Código de rubro": eva.get("codigo_rubro", ""),
                 "Género -> (genero, genero2, genero3, sr)": (
                     genero,
                     genero2,
@@ -396,6 +487,7 @@ def run_permisos_comercio():
             eva["horario"] = st.text_input(
                 "Horario (override opcional)", value=eva.get("horario", "")
             )
+            # Rubro/código se asumen correctos desde la selección del módulo 1
 
         def plantilla_por_tipo(t):
             return (
@@ -424,6 +516,16 @@ def run_permisos_comercio():
                 st.error("Falta **Horario** en Evaluación (o en Ediciones rápidas).")
             elif falt:
                 st.error("Faltan campos de Resolución: " + ", ".join(falt))
+            elif not eva.get("tiempo") or not eva.get("plazo"):
+                st.error(
+                    "La Evaluación no tiene 'tiempo' y/o 'plazo'. "
+                    "Vuelve a generar la Evaluación y luego la Resolución."
+                )
+            elif not eva.get("rubro") or not eva.get("codigo_rubro"):
+                st.error(
+                    "La Evaluación no tiene 'rubro' y/o 'código de rubro'. "
+                    "Vuelve a generar la Evaluación seleccionando un rubro."
+                )
             else:
                 anio_res = pd.to_datetime(fecha_resolucion).year
                 vigencia_texto = build_vigencia(res_vig_ini, res_vig_fin)
@@ -443,11 +545,18 @@ def run_permisos_comercio():
                     "giro": str(eva.get("giro", "")).strip(),
                     "ubicacion": str(eva.get("ubicacion", "")).strip(),
                     "horario": str(eva.get("horario", "")).strip(),
+                    # rubro + código para la frase:
+                    # "en el rubro {{rubro}} con el código {{codigo_rubro}}"
+                    "rubro": str(eva.get("rubro", "")).strip(),
+                    "codigo_rubro": str(eva.get("codigo_rubro", "")).strip(),
                     "cod_evaluacion": str(eva.get("cod_evaluacion", "")).strip(),
                     "fecha_evaluacion": eva.get("fecha_evaluacion", ""),
                     "cod_certificacion": str(cod_certificacion).strip(),
                     "vigencia": vigencia_texto,
                     "antiguo_certificado": str(antiguo_certificado or "").strip(),
+                    # plazo: "AUTORIZAR por el plazo de ({{tiempo}}) {{plazo}}"
+                    "tiempo": eva.get("tiempo", ""),
+                    "plazo": eva.get("plazo", ""),
                 }
 
                 tpl = plantilla_por_tipo(res_tipo)
@@ -511,6 +620,9 @@ def run_permisos_comercio():
                     "plazo": eva.get("plazo", ""),
                     "vigencia2": build_vigencia2(v_vig_ini, v_vig_fin),
                     "fecha_certificado": fmt_fecha_larga(fecha_certificado),
+                    # por si en algún momento quieres usar rubro/código en el certificado
+                    "rubro": eva.get("rubro", ""),
+                    "codigo_rubro": eva.get("codigo_rubro", ""),
                 }
                 render_doc(
                     ctx_cert,
@@ -525,7 +637,8 @@ def run_permisos_comercio():
 **Evaluación (`evaluacion_ambulante.docx`):**  
 {{cod_evaluacion}}, {{nombre}}, {{dni}}, {{ds}}, {{domicilio}},  
 {{fecha_ingreso}}, {{fecha_evaluacion}}, {{giro}}, {{ubicacion}},  
-{{referencia}}, {{horario}}, {{tiempo}}, {{plazo}}
+{{referencia}}, {{horario}}, {{tiempo}}, {{plazo}},  
+{{rubro}}, {{codigo_rubro}}
 
 **Resolución (NUEVO / DENTRO / FUERA):**  
 {{cod_resolucion}}, {{fecha_resolucion}},  
@@ -533,8 +646,10 @@ def run_permisos_comercio():
 {{genero}}, {{genero2}}, {{genero3}},  
 {{nombre}}, {{dni}}, {{domicilio}},  
 {{giro}}, {{ubicacion}}, {{horario}},  
+{{rubro}}, {{codigo_rubro}},  
 {{cod_evaluacion}}, {{fecha_evaluacion}},  
-{{cod_certificacion}}, {{vigencia}}, {{antiguo_certificado}}
+{{cod_certificacion}}, {{vigencia}}, {{antiguo_certificado}},  
+{{tiempo}}, {{plazo}}
 
 **Certificado (`certificado.docx`):**  
 {{codigo_certificado}}, {{ds}},  
@@ -543,7 +658,8 @@ def run_permisos_comercio():
 {{horario}},  
 {{tiempo}}, {{plazo}},  
 {{vigencia2}},  
-{{fecha_certificado}}
+{{fecha_certificado}},  
+{{rubro}}, {{codigo_rubro}}
 """
         )
 
