@@ -161,25 +161,28 @@ def run_evaluacion_comercio():
             # Contexto para docxtpl
             ctx = {
                 "cod_evaluacion": cod_evaluacion.strip(),
-                "nombre": nombre.strip().upper(),       # Mayúsculas
+                "nombre": nombre.strip().upper(),
                 "dni": dni.strip(),
                 "ds": (ds or "").strip(),
-                "domicilio": domicilio.strip().upper(), # Mayúsculas
+                "domicilio": domicilio.strip().upper(),
                 "fecha_ingreso": fmt_fecha_corta(fecha_ingreso),
                 "fecha_evaluacion": fmt_fecha_larga(fecha_evaluacion),
                 "giro": giro.strip(),
                 "ubicacion": ubicacion.strip(),
-                "referencia": (referencia or "").strip().upper(),  # Mayúsculas
+                "referencia": (referencia or "").strip().upper(),
                 "tiempo": int(tiempo_num),
-                "plazo": plazo_unidad
+                "plazo": plazo_unidad,
             }
 
-            # Nombre bonito del archivo
+            # 🔹 Guardar contexto para reutilizar en Resolución
+            st.session_state["comercio_eval_ctx"] = ctx
+
             nombre_archivo_pretty = (
                 f"EV. N° {cod_evaluacion}-{anio_eval}_{nombre.strip().upper()}"
             )
 
             render_doc(ctx, nombre_archivo_pretty, TPL_PATH)
+
 
 
 # Permite correr SOLO este módulo si quieres:

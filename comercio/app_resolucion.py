@@ -12,10 +12,12 @@ from utils import (
     safe_filename_pretty,
     fmt_fecha_corta,
     fmt_fecha_larga,
-    fmt_fecha_larga_de,
     build_vigencia,
     to_upper,
 )
+
+# Nombre de la key donde Evaluación guarda su contexto
+EVAL_CTX_KEY = "comercio_eval_ctx"
 
 
 # ========= helper para guardar DOCX =========
@@ -33,7 +35,7 @@ def render_doc(context: dict, filename_stem: str, plantilla_path: str):
 
     out_name = f"{safe_filename_pretty(filename_stem)}.docx"
 
-    # guardamos también en carpeta local "salidas" (por si acaso)
+    # Guardar también en carpeta local "salidas"
     os.makedirs("salidas", exist_ok=True)
     with open(os.path.join("salidas", out_name), "wb") as f:
         f.write(buf.getvalue())
@@ -68,11 +70,25 @@ def run_resolucion_nuevo():
 
     st.title("📄 Resolución Gerencial – Tipo NUEVO")
     st.caption(
-        "Variables comunes con Evaluación + específicas de Resolución "
-        "(género, vigencia y datos del certificado)."
+        "Reutiliza datos de la Evaluación y añade la información propia de la Resolución."
     )
 
-    # Plantilla
+    # ----------------- contexto reutilizado de Evaluación -----------------
+    eval_ctx = st.session_state.get(EVAL_CTX_KEY, {}) or {}
+
+    def ev(key, default=""):
+        """Conveniencia: trae de Evaluación como str si existe."""
+        if key not in eval_ctx or eval_ctx[key] is None:
+            return default
+        return eval_ctx[key]
+
+    with st.expander("👁 Datos importados desde Evaluación (solo lectura)"):
+        if eval_ctx:
+            st.json(eval_ctx)
+        else:
+            st.info("Aún no hay contexto de Evaluación en session_state.")
+
+    # ----------------- plantilla -----------------
     TPL_PATH = "plantillas/resolucion_nuevo.docx"
     with st.expander("📎 Subir/actualizar plantilla .docx (opcional)"):
         up = st.file_uploader("Plantilla de resolución (NUEVO)", type=["docx"])
@@ -98,7 +114,7 @@ def run_resolucion_nuevo():
     st.markdown("---")
     st.subheader("Datos del administrado (reusados de Evaluación)")
 
-    # Selecciones exactas de género
+    # Género (no viene de evaluación, pero podrías mapearlo si quisieras)
     cgen = st.columns(3)
     with cgen[0]:
         genero = st.selectbox(
@@ -116,14 +132,19 @@ def run_resolucion_nuevo():
             ["identificada", "identificado"],
         )
 
+    # Nombre / DNI / DS / Domicilio
     c1 = st.columns(2)
     with c1[0]:
-        nombre = st.text_input("Nombre completo*", value="")
+        nombre = st.text_input(
+            "Nombre completo*",
+            value=str(ev("nombre", "")),
+        )
     with c1[1]:
         dni = st.text_input(
             "DNI* (8 dígitos)",
             max_chars=8,
             placeholder="########",
+            value=str(ev("dni", "")),
         )
 
     dni_error = None
@@ -133,29 +154,43 @@ def run_resolucion_nuevo():
 
     c2 = st.columns(2)
     with c2[0]:
-        ds = st.text_input("Documento Simple (DS)*", placeholder="Ej: 123")
+        ds = st.text_input(
+            "Documento Simple (DS)*",
+            placeholder="Ej: 123",
+            value=str(ev("ds", "")),
+        )
     with c2[1]:
         fecha_ingreso = st.date_input(
             "Fecha de ingreso (DS)*", value=None, format="DD/MM/YYYY"
         )
 
+    domicilio_val = str(ev("domicilio", ""))
+    # si viene con "-PACHACAMAC" lo quitamos para editarlo limpio
+    if domicilio_val.endswith("-PACHACAMAC"):
+        domicilio_val = domicilio_val.replace("-PACHACAMAC", "")
+
     domicilio = st.text_input(
         "Domicilio fiscal*",
         placeholder="Calle / Av. ... (sin '-PACHACÁMAC')",
+        value=domicilio_val,
     )
 
+    # Giro / Ubicación
     c3 = st.columns(2)
     with c3[0]:
         ubicacion = st.text_input(
             "Ubicación*",
             placeholder="Ubicación exacta (sin 'Distrito de Pachacámac')",
+            value=str(ev("ubicacion", "")),
         )
     with c3[1]:
         giro = st.text_input(
             "Giro solicitado*",
             placeholder="p.ej. VENTA DE BEBIDAS SALUDABLES Y SANDWICHES",
+            value=str(ev("giro", "")),
         )
 
+    # Horario, Rubro y Código de rubro (estos son propios de la Resolución)
     c4 = st.columns(2)
     with c4[0]:
         horario = st.text_input(
@@ -163,17 +198,21 @@ def run_resolucion_nuevo():
         )
     with c4[1]:
         rubro = st.text_input(
-            "Rubro*", placeholder="p.ej. Alimentos y bebidas"
+            "Rubro*",
+            placeholder="p.ej. Alimentos y bebidas",
         )
 
     c5 = st.columns(2)
     with c5[0]:
         codigo_rubro = st.text_input(
-            "Código de rubro*", placeholder="p.ej. A1-03"
+            "Código de rubro*",
+            placeholder="p.ej. 005",
         )
     with c5[1]:
         cod_evaluacion = st.text_input(
-            "Código de Evaluación*", value="", placeholder="Ej: 121"
+            "Código de Evaluación*",
+            value=str(ev("cod_evaluacion", "")),
+            placeholder="Ej: 121",
         )
 
     fecha_evaluacion = st.date_input(
@@ -188,18 +227,34 @@ def run_resolucion_nuevo():
     with cv1[1]:
         vig_fin = st.date_input("Fin*", value=None, format="DD/MM/YYYY")
 
-    # Estos dos campos son los que se usan en la plantilla:
-    #   AUTORIZAR por el plazo de ({{tiempo}}) {{plazo}}, ...
+    # Tiempo y plazo reutilizados de Evaluación
+    tiempo_default = ev("tiempo", 1)
+    try:
+        tiempo_default_int = int(tiempo_default) if tiempo_default else 1
+    except Exception:
+        tiempo_default_int = 1
+
+    plazo_opciones = ["meses", "años"]
+    plazo_default = str(ev("plazo", "meses"))
+    plazo_index = (
+        plazo_opciones.index(plazo_default)
+        if plazo_default in plazo_opciones
+        else 0
+    )
+
     cv2 = st.columns(2)
     with cv2[0]:
-        tiempo = st.text_input(
+        tiempo_num = st.number_input(
             "Tiempo* (dentro del paréntesis)",
-            placeholder="Ej: 3",
+            min_value=1,
+            step=1,
+            value=tiempo_default_int,
         )
     with cv2[1]:
-        plazo = st.text_input(
+        plazo_unidad = st.selectbox(
             "Plazo* (unidad de tiempo)",
-            placeholder="Ej: meses",
+            plazo_opciones,
+            index=plazo_index,
         )
 
     # =================== BLOQUE: CERTIFICADO ===================
@@ -236,8 +291,8 @@ def run_resolucion_nuevo():
             "fecha_evaluacion": fecha_evaluacion,
             "vig_ini": vig_ini,
             "vig_fin": vig_fin,
-            "tiempo": tiempo,
-            "plazo": plazo,
+            "tiempo": tiempo_num,
+            "plazo": plazo_unidad,
             "cod_certificacion": cod_certificacion,
         }.items():
             if v is None or (isinstance(v, str) and not v.strip()):
@@ -256,20 +311,16 @@ def run_resolucion_nuevo():
 
         # =================== CONTEXTO PARA LA PLANTILLA ===================
         anio_res = fecha_resolucion.year
-        vigencia_texto = build_vigencia(
-            vig_ini, vig_fin
-        )  # "16 de enero de 2026 hasta el 16 de abril de 2026"
+        vigencia_texto = build_vigencia(vig_ini, vig_fin)
 
         ctx = {
             # Encabezado
             "cod_resolucion": cod_resolucion.strip(),
-            "fecha_resolucion": fmt_fecha_larga(
-                fecha_resolucion
-            ),  # Pachacámac, 16 de enero del 2026
+            "fecha_resolucion": fmt_fecha_larga(fecha_resolucion),
 
             # Vistos / Considerandos
             "ds": ds.strip(),
-            "fecha_ingreso": fmt_fecha_corta(fecha_ingreso),  # 12/01/2026
+            "fecha_ingreso": fmt_fecha_corta(fecha_ingreso),
             "genero": genero,
             "genero2": genero2,
             "genero3": genero3,
@@ -290,10 +341,9 @@ def run_resolucion_nuevo():
             "cod_certificacion": cod_certificacion.strip(),
             "vigencia": vigencia_texto,
 
-            # Campos específicos para la frase:
-            # "AUTORIZAR por el plazo de ({{tiempo}}) {{plazo}}, ..."
-            "tiempo": tiempo.strip(),
-            "plazo": plazo.strip(),
+            # Para el texto: "AUTORIZAR por el plazo de ({{tiempo}}) {{plazo}}"
+            "tiempo": int(tiempo_num),
+            "plazo": plazo_unidad,
         }
 
         nombre_arch = f"RES. N° {cod_resolucion}-{anio_res}_{to_upper(nombre)}"
