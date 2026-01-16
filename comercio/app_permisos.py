@@ -6,6 +6,10 @@ import pandas as pd
 import io
 import os
 
+# ✅ CodeAPI para autocompletar DNI
+from integraciones.codeapi import CodeapiAPIError, consultar_dni
+
+
 # ========= Utils =========
 
 
@@ -97,6 +101,87 @@ def genero_labels(sexo: str):
         if sexo == "Femenino"
         else ("el señor", "el administrado", "identificado", "Sr")
     )
+
+
+# ========= CodeAPI: helpers DNI =========
+
+
+def _extract_nombre_persona(res: dict) -> str:
+    """
+    Intenta armar el nombre completo a partir de varias posibles llaves
+    que puede devolver CodeAPI.
+    """
+    data = res.get("result") if isinstance(res, dict) else res
+    if not isinstance(data, dict):
+        data = {}
+
+    # nombre completo directo
+    nombre_completo = (
+        (data.get("nombre_completo") or "").strip()
+        or (data.get("nombreCompleto") or "").strip()
+        or (data.get("full_name") or "").strip()
+    )
+    if nombre_completo:
+        return nombre_completo
+
+    # nombres + apellidos
+    nombres = (data.get("nombres") or data.get("nombre") or "").strip()
+    ape_pat = (
+        data.get("apellido_paterno")
+        or data.get("ape_paterno")
+        or data.get("apellidoPaterno")
+        or ""
+    ).strip()
+    ape_mat = (
+        data.get("apellido_materno")
+        or data.get("ape_materno")
+        or data.get("apellidoMaterno")
+        or ""
+    ).strip()
+
+    if any([nombres, ape_pat, ape_mat]):
+        return " ".join(p for p in [ape_pat, ape_mat, nombres] if p)
+
+    # fallback: lo que venga
+    return ""
+
+
+def _cb_autocomplete_dni():
+    """
+    Callback para el text_input de DNI.
+    Usa CodeAPI para buscar el nombre y autocompletarlo en 'nombre'.
+    """
+    dni_val = (st.session_state.get("dni") or "").strip()
+    st.session_state["permisos_lookup_msg"] = ""
+
+    if not dni_val:
+        return
+
+    if not (dni_val.isdigit() and len(dni_val) == 8):
+        st.session_state["permisos_lookup_msg"] = "⚠️ DNI inválido (debe tener 8 dígitos)."
+        return
+
+    try:
+        res = consultar_dni(dni_val)
+        nombre = _extract_nombre_persona(res)
+
+        if nombre:
+            st.session_state["nombre"] = nombre
+            st.session_state["permisos_lookup_msg"] = "✅ DNI encontrado, nombre autocompletado."
+        else:
+            st.session_state["permisos_lookup_msg"] = (
+                "⚠️ DNI válido, pero el servicio no devolvió nombre."
+            )
+    except (ValueError, CodeapiAPIError) as e:
+        st.session_state["permisos_lookup_msg"] = f"⚠️ {e}"
+    except Exception as e:
+        st.session_state["permisos_lookup_msg"] = (
+            f"⚠️ Error inesperado consultando DNI: {e}"
+        )
+
+
+def _init_permisos_state():
+    st.session_state.setdefault("permisos_lookup_msg", "")
 
 
 # ========= Catálogo de rubros según Ordenanza =========
@@ -207,6 +292,7 @@ def extraer_giro_desde_label(label: str):
 
 def run_permisos_comercio():
     asegurar_dirs()
+    _init_permisos_state()
 
     st.markdown(
         """
@@ -244,6 +330,28 @@ def run_permisos_comercio():
 
     sexo = st.selectbox("Género de la persona*", ["Femenino", "Masculino"], key="sexo")
 
+    # DNI primero, con autocomplete
+    dni = st.text_input(
+        "DNI* (8 dígitos)",
+        key="dni",
+        value=st.session_state.get("dni", ""),
+        max_chars=8,
+        placeholder="########",
+        on_change=_cb_autocomplete_dni,
+    )
+
+    # Mensaje del lookup
+    lookup_msg = (st.session_state.get("permisos_lookup_msg") or "").strip()
+    if lookup_msg:
+        if lookup_msg.startswith("✅"):
+            st.success(lookup_msg)
+        else:
+            st.warning(lookup_msg)
+
+    # Validación visual rápida
+    if dni and (not dni.isdigit() or len(dni) != 8):
+        st.error("⚠️ DNI debe tener exactamente 8 dígitos numéricos")
+
     cod_evaluacion = st.text_input(
         "Código de evaluación*",
         key="cod_evaluacion",
@@ -255,15 +363,6 @@ def run_permisos_comercio():
         key="nombre",
         value=st.session_state.get("nombre", ""),
     )
-    dni = st.text_input(
-        "DNI* (8 dígitos)",
-        key="dni",
-        value=st.session_state.get("dni", ""),
-        max_chars=8,
-        placeholder="########",
-    )
-    if dni and (not dni.isdigit() or len(dni) != 8):
-        st.error("⚠️ DNI debe tener exactamente 8 dígitos numéricos")
 
     ds = st.text_input(
         "Documento Simple (DS)",
