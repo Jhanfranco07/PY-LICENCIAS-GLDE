@@ -1,35 +1,52 @@
 # comercio/app_resolucion.py
 
+import io
+import os
+from datetime import datetime
+
 import streamlit as st
 from docxtpl import DocxTemplate
-from datetime import datetime
-import io, os
 
 from utils import (
-    asegurar_dirs, safe_filename_pretty,
-    fmt_fecha_corta, fmt_fecha_larga, fmt_fecha_larga_de,
-    build_vigencia, to_upper
+    asegurar_dirs,
+    safe_filename_pretty,
+    fmt_fecha_corta,
+    fmt_fecha_larga,
+    fmt_fecha_larga_de,
+    build_vigencia,
+    to_upper,
 )
+
 
 # ========= helper para guardar DOCX =========
 def render_doc(context: dict, filename_stem: str, plantilla_path: str):
     if not os.path.exists(plantilla_path):
         st.error(f"No se encontró la plantilla: {plantilla_path}")
         return
+
     doc = DocxTemplate(plantilla_path)
     doc.render(context)
+
     buf = io.BytesIO()
     doc.save(buf)
     buf.seek(0)
+
     out_name = f"{safe_filename_pretty(filename_stem)}.docx"
+
+    # guardamos también en carpeta local "salidas" (por si acaso)
+    os.makedirs("salidas", exist_ok=True)
     with open(os.path.join("salidas", out_name), "wb") as f:
         f.write(buf.getvalue())
+
     st.success(f"Documento generado: {out_name}")
     st.download_button(
         "⬇️ Descargar .docx",
         buf,
         file_name=out_name,
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        mime=(
+            "application/vnd.openxmlformats-"
+            "officedocument.wordprocessingml.document"
+        ),
     )
 
 
@@ -52,7 +69,7 @@ def run_resolucion_nuevo():
     st.title("📄 Resolución Gerencial – Tipo NUEVO")
     st.caption(
         "Variables comunes con Evaluación + específicas de Resolución "
-        "(género y vigencia según tus reglas)."
+        "(género, vigencia y datos del certificado)."
     )
 
     # Plantilla
@@ -64,6 +81,7 @@ def run_resolucion_nuevo():
                 f.write(up.read())
             st.success("Plantilla actualizada.")
 
+    # =================== BLOQUE: DATOS RESOLUCIÓN ===================
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Datos de la Resolución")
 
@@ -84,7 +102,8 @@ def run_resolucion_nuevo():
     cgen = st.columns(3)
     with cgen[0]:
         genero = st.selectbox(
-            "género (texto en 'Visto')*", ["la señora", "el señor"]
+            "género (texto en 'Visto')*",
+            ["la señora", "el señor"],
         )
     with cgen[1]:
         genero2 = st.selectbox(
@@ -101,7 +120,12 @@ def run_resolucion_nuevo():
     with c1[0]:
         nombre = st.text_input("Nombre completo*", value="")
     with c1[1]:
-        dni = st.text_input("DNI* (8 dígitos)", max_chars=8, placeholder="########")
+        dni = st.text_input(
+            "DNI* (8 dígitos)",
+            max_chars=8,
+            placeholder="########",
+        )
+
     dni_error = None
     if dni and (not dni.isdigit() or len(dni) != 8):
         dni_error = "El DNI debe tener exactamente 8 dígitos numéricos."
@@ -116,22 +140,26 @@ def run_resolucion_nuevo():
         )
 
     domicilio = st.text_input(
-        "Domicilio fiscal*", placeholder="Calle / Av. ... (sin '-PACHACÁMAC')"
+        "Domicilio fiscal*",
+        placeholder="Calle / Av. ... (sin '-PACHACÁMAC')",
     )
+
     c3 = st.columns(2)
     with c3[0]:
         ubicacion = st.text_input(
-            "Ubicación*", placeholder="Ubicación exacta (sin 'Distrito de Pachacámac')"
+            "Ubicación*",
+            placeholder="Ubicación exacta (sin 'Distrito de Pachacámac')",
         )
     with c3[1]:
         giro = st.text_input(
-            "Giro solicitado*", placeholder="p.ej. venta de jugos"
+            "Giro solicitado*",
+            placeholder="p.ej. VENTA DE BEBIDAS SALUDABLES Y SANDWICHES",
         )
 
     c4 = st.columns(2)
     with c4[0]:
         horario = st.text_input(
-            "Horario*", placeholder="p.ej. 08:00 a 18:00"
+            "Horario*", placeholder="p.ej. 06:00 a 11:00"
         )
     with c4[1]:
         rubro = st.text_input(
@@ -152,15 +180,29 @@ def run_resolucion_nuevo():
         "Fecha de Evaluación*", value=None, format="DD/MM/YYYY"
     )
 
-    # Vigencia
+    # =================== BLOQUE: VIGENCIA ===================
     st.markdown("**Vigencia de la autorización**")
-    cv = st.columns(2)
-    with cv[0]:
+    cv1 = st.columns(2)
+    with cv1[0]:
         vig_ini = st.date_input("Inicio*", value=None, format="DD/MM/YYYY")
-    with cv[1]:
+    with cv1[1]:
         vig_fin = st.date_input("Fin*", value=None, format="DD/MM/YYYY")
 
-    # Certificado
+    # Estos dos campos son los que se usan en la plantilla:
+    #   AUTORIZAR por el plazo de ({{tiempo}}) {{plazo}}, ...
+    cv2 = st.columns(2)
+    with cv2[0]:
+        tiempo = st.text_input(
+            "Tiempo* (dentro del paréntesis)",
+            placeholder="Ej: 3",
+        )
+    with cv2[1]:
+        plazo = st.text_input(
+            "Plazo* (unidad de tiempo)",
+            placeholder="Ej: meses",
+        )
+
+    # =================== BLOQUE: CERTIFICADO ===================
     c6 = st.columns(2)
     with c6[0]:
         cod_certificacion = st.text_input(
@@ -171,6 +213,7 @@ def run_resolucion_nuevo():
 
     st.markdown("</div>", unsafe_allow_html=True)
 
+    # =================== BOTÓN GENERAR ===================
     if st.button("📄 Generar Resolución (NUEVO)"):
         faltantes = []
         for k, v in {
@@ -193,6 +236,8 @@ def run_resolucion_nuevo():
             "fecha_evaluacion": fecha_evaluacion,
             "vig_ini": vig_ini,
             "vig_fin": vig_fin,
+            "tiempo": tiempo,
+            "plazo": plazo,
             "cod_certificacion": cod_certificacion,
         }.items():
             if v is None or (isinstance(v, str) and not v.strip()):
@@ -207,47 +252,52 @@ def run_resolucion_nuevo():
                 st.error("Faltan campos obligatorios: " + ", ".join(faltantes))
             for r in reglas:
                 st.error(f"Regla: {r}")
-        else:
-            anio_res = fecha_resolucion.year
-            vigencia_texto = build_vigencia(
-                vig_ini, vig_fin
-            )  # "24 de setiembre de 2025 hasta el 24 de octubre de 2025"
+            return
 
-            ctx = {
-                # Encabezado
-                "cod_resolucion": cod_resolucion.strip(),
-                "fecha_resolucion": fmt_fecha_larga(
-                    fecha_resolucion
-                ),  # Pachacámac, 16 de setiembre del 2025
+        # =================== CONTEXTO PARA LA PLANTILLA ===================
+        anio_res = fecha_resolucion.year
+        vigencia_texto = build_vigencia(
+            vig_ini, vig_fin
+        )  # "16 de enero de 2026 hasta el 16 de abril de 2026"
 
-                # Vistos / Considerandos
-                "ds": ds.strip(),
-                "fecha_ingreso": fmt_fecha_corta(fecha_ingreso),  # 15/09/2025
-                "genero": genero,  # la señora / el señor
-                "genero2": genero2,  # la administrada / el administrado
-                "genero3": genero3,  # identificada / identificado
-                "nombre": to_upper(nombre),
-                "dni": dni.strip(),
-                "domicilio": to_upper(domicilio) + "-PACHACAMAC",
-                "giro": giro.strip(),
-                "ubicacion": ubicacion.strip(),  # usar {{ubicacion}} en plantilla
-                "horario": horario.strip(),
-                "rubro": rubro.strip(),
-                "codigo_rubro": codigo_rubro.strip(),
+        ctx = {
+            # Encabezado
+            "cod_resolucion": cod_resolucion.strip(),
+            "fecha_resolucion": fmt_fecha_larga(
+                fecha_resolucion
+            ),  # Pachacámac, 16 de enero del 2026
 
-                # Referencia Evaluación
-                "cod_evaluacion": cod_evaluacion.strip(),
-                "fecha_evaluacion": fmt_fecha_larga(
-                    fecha_evaluacion
-                ),  # 16 de setiembre del 2025
+            # Vistos / Considerandos
+            "ds": ds.strip(),
+            "fecha_ingreso": fmt_fecha_corta(fecha_ingreso),  # 12/01/2026
+            "genero": genero,
+            "genero2": genero2,
+            "genero3": genero3,
+            "nombre": to_upper(nombre),
+            "dni": dni.strip(),
+            "domicilio": to_upper(domicilio) + "-PACHACAMAC",
+            "giro": giro.strip(),
+            "ubicacion": ubicacion.strip(),
+            "horario": horario.strip(),
+            "rubro": rubro.strip(),
+            "codigo_rubro": codigo_rubro.strip(),
 
-                # Artículos
-                "cod_certificacion": cod_certificacion.strip(),
-                "vigencia": vigencia_texto,
-            }
+            # Referencia Evaluación
+            "cod_evaluacion": cod_evaluacion.strip(),
+            "fecha_evaluacion": fmt_fecha_larga(fecha_evaluacion),
 
-            nombre_arch = f"RES. N° {cod_resolucion}-{anio_res}_{to_upper(nombre)}"
-            render_doc(ctx, nombre_arch, TPL_PATH)
+            # Artículos
+            "cod_certificacion": cod_certificacion.strip(),
+            "vigencia": vigencia_texto,
+
+            # Campos específicos para la frase:
+            # "AUTORIZAR por el plazo de ({{tiempo}}) {{plazo}}, ..."
+            "tiempo": tiempo.strip(),
+            "plazo": plazo.strip(),
+        }
+
+        nombre_arch = f"RES. N° {cod_resolucion}-{anio_res}_{to_upper(nombre)}"
+        render_doc(ctx, nombre_arch, TPL_PATH)
 
 
 # Para correr este módulo solo
