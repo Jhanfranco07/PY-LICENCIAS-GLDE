@@ -1,18 +1,19 @@
 # comercio/app_permisos.py
 
-import streamlit as st
-from docxtpl import DocxTemplate
-import pandas as pd
 import io
 import os
 
-# ✅ CodeAPI para autocompletar DNI
-from integraciones.codart import CodeapiAPIError, consultar_dni
+import pandas as pd
+import streamlit as st
+from docxtpl import DocxTemplate
 
+from integraciones.codart import (
+    CodartAPIError,
+    consultar_dni,
+    dni_a_nombre_completo,
+)
 
-# ========= Utils =========
-
-
+# ========= Utils locales =========
 def asegurar_dirs():
     os.makedirs("salidas", exist_ok=True)
     os.makedirs("plantillas", exist_ok=True)
@@ -52,7 +53,7 @@ def fmt_fecha_larga(d) -> str:
     ]
     try:
         dt = pd.to_datetime(d)
-        return f"{dt.day} de {meses[dt.month-1]} del {dt.year}"
+        return f"{dt.day} de {meses[dt.month - 1]} del {dt.year}"
     except Exception:
         return ""
 
@@ -91,7 +92,10 @@ def render_doc(context: dict, filename_stem: str, plantilla_path: str):
         "⬇️ Descargar .docx",
         buf,
         file_name=out_name,
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        mime=(
+            "application/vnd.openxmlformats-"
+            "officedocument.wordprocessingml.document"
+        ),
     )
 
 
@@ -103,196 +107,175 @@ def genero_labels(sexo: str):
     )
 
 
-# ========= CodeAPI: helpers DNI =========
+# ========= Catálogo de GIROS / RUBROS según Ordenanza =========
+GIROS_RUBROS = [
+    # Rubro 1
+    {
+        "label": "Rubro 1.a - Golosinas y afines (CÓDIGO G 001)",
+        "giro": "Golosinas y afines, debidamente envasados con registro sanitario y con fecha de vencimiento vigente.",
+        "rubro": "1",
+        "codigo": "001",
+    },
+    # Rubro 2
+    {
+        "label": "Rubro 2.a - Venta de frutas o verduras (CÓDIGO G 002)",
+        "giro": "Venta de frutas o verduras.",
+        "rubro": "2",
+        "codigo": "002",
+    },
+    {
+        "label": "Rubro 2.b - Productos naturales con registro sanitario (CÓDIGO G 003)",
+        "giro": "Venta de productos naturales, con registro sanitario.",
+        "rubro": "2",
+        "codigo": "003",
+    },
+    # Rubro 3
+    {
+        "label": "Rubro 3.a - Bebidas saludables (CÓDIGO G 004)",
+        "giro": "Bebidas saludables: emoliente, quinua, maca, soya.",
+        "rubro": "3",
+        "codigo": "004",
+    },
+    {
+        "label": "Rubro 3.b - Potajes tradicionales (CÓDIGO G 005)",
+        "giro": "Potajes tradicionales.",
+        "rubro": "3",
+        "codigo": "005",
+    },
+    {
+        "label": "Rubro 3.c - Dulces tradicionales (CÓDIGO G 006)",
+        "giro": "Dulces tradicionales.",
+        "rubro": "3",
+        "codigo": "006",
+    },
+    {
+        "label": "Rubro 3.d - Sándwiches (CÓDIGO G 007)",
+        "giro": "Sándwiches.",
+        "rubro": "3",
+        "codigo": "007",
+    },
+    {
+        "label": "Rubro 3.e - Jugo de naranja y similares (CÓDIGO G 008)",
+        "giro": "Jugo de naranja y similares.",
+        "rubro": "3",
+        "codigo": "008",
+    },
+    {
+        "label": "Rubro 3.f - Canchitas, confitería y similares (CÓDIGO G 009)",
+        "giro": "Canchitas, confitería y similares.",
+        "rubro": "3",
+        "codigo": "009",
+    },
+    # Rubro 4
+    {
+        "label": "Rubro 4.a - Mercería, bazar y útiles de escritorio (CÓDIGO G 010)",
+        "giro": "Mercerías, artículos de bazar y útiles de escritorio.",
+        "rubro": "4",
+        "codigo": "010",
+    },
+    {
+        "label": "Rubro 4.b - Diarios, revistas, libros y loterías (CÓDIGO G 011)",
+        "giro": "Diarios y revistas, libros y loterías.",
+        "rubro": "4",
+        "codigo": "011",
+    },
+    {
+        "label": "Rubro 4.c - Monedas y estampillas (CÓDIGO G 012)",
+        "giro": "Monedas y estampillas.",
+        "rubro": "4",
+        "codigo": "012",
+    },
+    {
+        "label": "Rubro 4.d - Artesanías (CÓDIGO G 013)",
+        "giro": "Artesanías.",
+        "rubro": "4",
+        "codigo": "013",
+    },
+    {
+        "label": "Rubro 4.e - Artículos religiosos (CÓDIGO G 014)",
+        "giro": "Artículos religiosos.",
+        "rubro": "4",
+        "codigo": "014",
+    },
+    {
+        "label": "Rubro 4.f - Artículos de limpieza (CÓDIGO G 015)",
+        "giro": "Artículos de limpieza.",
+        "rubro": "4",
+        "codigo": "015",
+    },
+    {
+        "label": "Rubro 4.g - Pilas y relojes (CÓDIGO G 016)",
+        "giro": "Pilas y relojes.",
+        "rubro": "4",
+        "codigo": "016",
+    },
+    # Rubro 5
+    {
+        "label": "Rubro 5.a - Duplicado de llaves / Cerrajería (CÓDIGO G 017)",
+        "giro": "Duplicado de llaves y cerrajería.",
+        "rubro": "5",
+        "codigo": "017",
+    },
+    {
+        "label": "Rubro 5.b - Lustradores de calzado (CÓDIGO G 018)",
+        "giro": "Lustradores de calzado.",
+        "rubro": "5",
+        "codigo": "018",
+    },
+    {
+        "label": "Rubro 5.c - Artistas plásticos y retratistas (CÓDIGO G 019)",
+        "giro": "Artistas plásticos y retratistas.",
+        "rubro": "5",
+        "codigo": "019",
+    },
+    {
+        "label": "Rubro 5.d - Fotografías (CÓDIGO G 020)",
+        "giro": "Fotografías.",
+        "rubro": "5",
+        "codigo": "020",
+    },
+]
+
+GIROS_OPCIONES = [item["label"] for item in GIROS_RUBROS]
 
 
-def _extract_nombre_persona(res: dict) -> str:
-    """
-    Intenta armar el nombre completo a partir de varias posibles llaves
-    que puede devolver CodeAPI.
-    """
-    data = res.get("result") if isinstance(res, dict) else res
-    if not isinstance(data, dict):
-        data = {}
-
-    # nombre completo directo
-    nombre_completo = (
-        (data.get("nombre_completo") or "").strip()
-        or (data.get("nombreCompleto") or "").strip()
-        or (data.get("full_name") or "").strip()
-    )
-    if nombre_completo:
-        return nombre_completo
-
-    # nombres + apellidos
-    nombres = (data.get("nombres") or data.get("nombre") or "").strip()
-    ape_pat = (
-        data.get("apellido_paterno")
-        or data.get("ape_paterno")
-        or data.get("apellidoPaterno")
-        or ""
-    ).strip()
-    ape_mat = (
-        data.get("apellido_materno")
-        or data.get("ape_materno")
-        or data.get("apellidoMaterno")
-        or ""
-    ).strip()
-
-    if any([nombres, ape_pat, ape_mat]):
-        return " ".join(p for p in [ape_pat, ape_mat, nombres] if p)
-
-    # fallback: lo que venga
-    return ""
+# ========= Autocomplete DNI (Codart) =========
+def _init_dni_state():
+    st.session_state.setdefault("dni_lookup_msg", "")
 
 
 def _cb_autocomplete_dni():
-    """
-    Callback para el text_input de DNI.
-    Usa CodeAPI para buscar el nombre y autocompletarlo en 'nombre'.
-    """
     dni_val = (st.session_state.get("dni") or "").strip()
-    st.session_state["permisos_lookup_msg"] = ""
+    st.session_state["dni_lookup_msg"] = ""
 
     if not dni_val:
         return
 
-    if not (dni_val.isdigit() and len(dni_val) == 8):
-        st.session_state["permisos_lookup_msg"] = "⚠️ DNI inválido (debe tener 8 dígitos)."
-        return
-
     try:
         res = consultar_dni(dni_val)
-        nombre = _extract_nombre_persona(res)
+        nombre = dni_a_nombre_completo(res)
 
         if nombre:
             st.session_state["nombre"] = nombre
-            st.session_state["permisos_lookup_msg"] = "✅ DNI encontrado, nombre autocompletado."
+            st.session_state[
+                "dni_lookup_msg"
+            ] = "✅ DNI válido: nombre autocompletado."
         else:
-            st.session_state["permisos_lookup_msg"] = (
-                "⚠️ DNI válido, pero el servicio no devolvió nombre."
-            )
-    except (ValueError, CodeapiAPIError) as e:
-        st.session_state["permisos_lookup_msg"] = f"⚠️ {e}"
+            st.session_state[
+                "dni_lookup_msg"
+            ] = "⚠️ DNI OK, pero no se encontró nombre."
+    except ValueError as e:
+        st.session_state["dni_lookup_msg"] = f"⚠️ {e}"
+    except CodartAPIError as e:
+        st.session_state["dni_lookup_msg"] = f"⚠️ {e}"
     except Exception as e:
-        st.session_state["permisos_lookup_msg"] = (
-            f"⚠️ Error inesperado consultando DNI: {e}"
-        )
+        st.session_state["dni_lookup_msg"] = f"⚠️ Error consultando DNI: {e}"
 
 
-def _init_permisos_state():
-    st.session_state.setdefault("permisos_lookup_msg", "")
-
-
-# ========= Catálogo de rubros según Ordenanza =========
-
-RUBROS_CODIGOS = [
-    (
-        "Rubro 1.a - Golosinas y afines (CÓDIGO G 001)",
-        "1.a",
-        "G 001",
-        "Golosinas y afines",
-    ),
-    (
-        "Rubro 2.a - Venta de frutas o verduras (CÓDIGO G 002)",
-        "2.a",
-        "G 002",
-        "Venta de frutas o verduras",
-    ),
-    (
-        "Rubro 2.b - Venta de productos naturales, con registro sanitario (CÓDIGO G 003)",
-        "2.b",
-        "G 003",
-        "Venta de productos naturales, con registro sanitario",
-    ),
-    (
-        "Rubro 3.a - Bebidas saludables. Emoliente, quinua, maca, soya (CÓDIGO G 004)",
-        "3.a",
-        "G 004",
-        "Bebidas saludables. Emoliente, quinua, maca, soya",
-    ),
-    (
-        "Rubro 3.b - Potajes tradicionales (CÓDIGO G 005)",
-        "3.b",
-        "G 005",
-        "Potajes tradicionales",
-    ),
-    (
-        "Rubro 3.c - Dulces tradicionales (CÓDIGO G 006)",
-        "3.c",
-        "G 006",
-        "Dulces tradicionales",
-    ),
-    ("Rubro 3.d - Sándwiches (CÓDIGO G 007)", "3.d", "G 007", "Sándwiches"),
-    (
-        "Rubro 3.e - Jugo de naranja y similares (CÓDIGO G 008)",
-        "3.e",
-        "G 008",
-        "Jugo de naranja y similares",
-    ),
-    (
-        "Rubro 3.f - Canchitas, confitería y similares (CÓDIGO G 009)",
-        "3.f",
-        "G 009",
-        "Canchitas, confitería y similares",
-    ),
-    (
-        "Rubro 4.a - Mercería, artículos de bazar y útiles de escritorio (CÓDIGO G 010)",
-        "4.a",
-        "G 010",
-        "Mercería, artículos de bazar y útiles de escritorio",
-    ),
-    (
-        "Rubro 4.b - Diarios y revistas, libros y loterías (CÓDIGO G 011)",
-        "4.b",
-        "G 011",
-        "Diarios y revistas, libros y loterías",
-    ),
-    (
-        "Rubro 4.c - Monedas y estampillas (CÓDIGO G 012)",
-        "4.c",
-        "G 012",
-        "Monedas y estampillas",
-    ),
-    ("Rubro 4.d - Artesanías (CÓDIGO G 013)", "4.d", "G 013", "Artesanías"),
-    ("Rubro 4.e - Artículos religiosos (CÓDIGO G 014)", "4.e", "G 014", "Artículos religiosos"),
-    ("Rubro 4.f - Artículos de limpieza (CÓDIGO G 015)", "4.f", "G 015", "Artículos de limpieza"),
-    ("Rubro 4.g - Pilas y relojes (CÓDIGO G 016)", "4.g", "G 016", "Pilas y relojes"),
-    (
-        "Rubro 5.a - Duplicado de llaves. Cerrajería (CÓDIGO G 017)",
-        "5.a",
-        "G 017",
-        "Duplicado de llaves. Cerrajería",
-    ),
-    (
-        "Rubro 5.b - Lustradores de calzado (CÓDIGO G 018)",
-        "5.b",
-        "G 018",
-        "Lustradores de calzado",
-    ),
-    (
-        "Rubro 5.c - Artistas plásticos y retratistas (CÓDIGO G 019)",
-        "5.c",
-        "G 019",
-        "Artistas plásticos y retratistas",
-    ),
-    ("Rubro 5.d - Fotografías (CÓDIGO G 020)", "5.d", "G 020", "Fotografías"),
-]
-
-
-def extraer_giro_desde_label(label: str):
-    for lbl, rubro, codigo, giro in RUBROS_CODIGOS:
-        if lbl == label:
-            return rubro, codigo, giro
-    return "", "", ""
-
-
-# ========= MÓDULO COMPLETO =========
-
-
+# ========= MÓDULO COMPLETO: evaluación + resolución + certificado =========
 def run_permisos_comercio():
     asegurar_dirs()
-    _init_permisos_state()
+    _init_dni_state()
 
     st.markdown(
         """
@@ -312,25 +295,18 @@ def run_permisos_comercio():
         "Resolución y Certificado reutilizan automáticamente esos datos."
     )
 
-    # Rutas de plantillas (ya deben existir en /plantillas)
+    # Rutas plantillas (sin uploader, ya están en la carpeta)
     TPL_EVAL = "plantillas/evaluacion_ambulante.docx"
     TPL_RES_NUEVO = "plantillas/resolucion_nuevo.docx"
     TPL_RES_DENTRO = "plantillas/resolucion_dentro_tiempo.docx"
     TPL_RES_FUERA = "plantillas/resolucion_fuera_tiempo.docx"
     TPL_CERT = "plantillas/certificado.docx"
 
-    st.info(
-        "Se usan plantillas .docx desde la carpeta `plantillas/`. "
-        "Si cambias una, solo reemplaza el archivo y recarga la app."
-    )
-
     # ---------- Módulo 1: EVALUACIÓN ----------
     st.header("Módulo 1 · Evaluación")
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    sexo = st.selectbox("Género de la persona*", ["Femenino", "Masculino"], key="sexo")
-
-    # DNI primero, con autocomplete
+    # DNI primero para autocompletar nombre
     dni = st.text_input(
         "DNI* (8 dígitos)",
         key="dni",
@@ -340,17 +316,25 @@ def run_permisos_comercio():
         on_change=_cb_autocomplete_dni,
     )
 
-    # Mensaje del lookup
-    lookup_msg = (st.session_state.get("permisos_lookup_msg") or "").strip()
-    if lookup_msg:
-        if lookup_msg.startswith("✅"):
-            st.success(lookup_msg)
+    msg_dni = (st.session_state.get("dni_lookup_msg") or "").strip()
+    if msg_dni:
+        if msg_dni.startswith("✅"):
+            st.success(msg_dni)
         else:
-            st.warning(lookup_msg)
+            st.warning(msg_dni)
 
-    # Validación visual rápida
-    if dni and (not dni.isdigit() or len(dni) != 8):
-        st.error("⚠️ DNI debe tener exactamente 8 dígitos numéricos")
+    nombre = st.text_input(
+        "Solicitante (Nombre completo)*",
+        key="nombre",
+        value=st.session_state.get("nombre", ""),
+    )
+
+    sexo = st.selectbox(
+        "Género de la persona*",
+        ["Femenino", "Masculino"],
+        key="sexo",
+        index=0 if st.session_state.get("sexo", "Femenino") == "Femenino" else 1,
+    )
 
     cod_evaluacion = st.text_input(
         "Código de evaluación*",
@@ -358,11 +342,9 @@ def run_permisos_comercio():
         value=st.session_state.get("cod_evaluacion", ""),
         placeholder="Ej: 121, 132, 142...",
     )
-    nombre = st.text_input(
-        "Solicitante (Nombre completo)*",
-        key="nombre",
-        value=st.session_state.get("nombre", ""),
-    )
+
+    if dni and (not dni.isdigit() or len(dni) != 8):
+        st.error("⚠️ DNI debe tener exactamente 8 dígitos numéricos")
 
     ds = st.text_input(
         "Documento Simple (DS)",
@@ -392,19 +374,18 @@ def run_permisos_comercio():
             format="DD/MM/YYYY",
         )
 
-    # Selector único de rubro que define también el giro
-    opciones_rubro = [r[0] for r in RUBROS_CODIGOS]
-    default_label = st.session_state.get("giro_label", opciones_rubro[0])
-    if default_label not in opciones_rubro:
-        default_label = opciones_rubro[0]
-
+    # Giro / Rubro según Ordenanza (un solo select)
     giro_label = st.selectbox(
-        "Rubro según Ordenanza (para 'giro', 'rubro' y 'código')*",
-        opciones_rubro,
-        index=opciones_rubro.index(default_label),
+        "Giro solicitado* (según Ordenanza)",
+        GIROS_OPCIONES,
         key="giro_label",
     )
-    rubro_num, codigo_rubro, giro_val = extraer_giro_desde_label(giro_label)
+
+    giro_info = next(item for item in GIROS_RUBROS if item["label"] == giro_label)
+    giro_texto = giro_info["giro"]
+    rubro_num = giro_info["rubro"]
+    codigo_rubro = giro_info["codigo"]
+
     st.caption(f"Se usará el rubro {rubro_num} con el código {codigo_rubro}.")
 
     ubicacion = st.text_input(
@@ -445,7 +426,6 @@ def run_permisos_comercio():
                 else 0
             ),
         )
-
     st.markdown("</div>", unsafe_allow_html=True)
 
     if st.button("🧾 Generar Evaluación (.docx)"):
@@ -455,7 +435,7 @@ def run_permisos_comercio():
             "nombre": nombre,
             "dni": dni,
             "domicilio": domicilio,
-            "giro": giro_val,
+            "giro": giro_texto,
             "ubicacion": ubicacion,
         }
         for k, v in req.items():
@@ -479,18 +459,19 @@ def run_permisos_comercio():
                 "domicilio": to_upper(domicilio),
                 "fecha_ingreso": fmt_fecha_corta(fecha_ingreso),
                 "fecha_evaluacion": fmt_fecha_larga(fecha_evaluacion),
-                "giro": giro_val.strip(),
+                "giro": giro_texto,
                 "ubicacion": ubicacion.strip(),
                 "referencia": to_upper(referencia),
                 "horario": horario_eval.strip(),
                 "tiempo": int(tiempo_num),
                 "plazo": plazo_unidad,
+                "rubro": rubro_num,
+                "codigo_rubro": codigo_rubro,
+                # raw dates para reutilizar en Resolución
                 "fecha_ingreso_raw": str(fecha_ingreso) if fecha_ingreso else "",
                 "fecha_evaluacion_raw": str(fecha_evaluacion)
                 if fecha_evaluacion
                 else "",
-                "rubro": rubro_num,
-                "codigo_rubro": codigo_rubro,
             }
             st.session_state["eval_ctx"] = ctx_eval
             anio_eval = pd.to_datetime(fecha_evaluacion).year
@@ -584,6 +565,8 @@ def run_permisos_comercio():
                 "Horario": eva.get("horario", ""),
                 "Código de Evaluación": eva.get("cod_evaluacion", ""),
                 "Fecha de Evaluación": eva.get("fecha_evaluacion", ""),
+                "Tiempo": eva.get("tiempo", ""),
+                "Plazo": eva.get("plazo", ""),
                 "Género -> (genero, genero2, genero3, sr)": (
                     genero,
                     genero2,
@@ -617,7 +600,7 @@ def run_permisos_comercio():
                 "Horario (override opcional)", value=eva.get("horario", "")
             )
 
-        def plantilla_por_tipo(t: str) -> str:
+        def plantilla_por_tipo(t):
             return (
                 TPL_RES_NUEVO
                 if t == "NUEVO"
@@ -658,12 +641,13 @@ def run_permisos_comercio():
                     "genero3": genero3,
                     "nombre": to_upper(eva.get("nombre", "")),
                     "dni": str(eva.get("dni", "")).strip(),
-                    "domicilio": to_upper(eva.get("domicilio", "")) + "-PACHACAMAC",
+                    "domicilio": to_upper(eva.get("domicilio", ""))
+                    + "-PACHACAMAC",
                     "giro": str(eva.get("giro", "")).strip(),
-                    "ubicacion": str(eva.get("ubicacion", "")).strip(),
-                    "horario": str(eva.get("horario", "")).strip(),
                     "rubro": str(eva.get("rubro", "")).strip(),
                     "codigo_rubro": str(eva.get("codigo_rubro", "")).strip(),
+                    "ubicacion": str(eva.get("ubicacion", "")).strip(),
+                    "horario": str(eva.get("horario", "")).strip(),
                     "cod_evaluacion": str(eva.get("cod_evaluacion", "")).strip(),
                     "fecha_evaluacion": eva.get("fecha_evaluacion", ""),
                     "cod_certificacion": str(cod_certificacion).strip(),
@@ -729,8 +713,6 @@ def run_permisos_comercio():
                     "ubicacion": str(eva.get("ubicacion", "")).strip(),
                     "referencia": to_upper(eva.get("referencia", "")),
                     "giro": str(eva.get("giro", "")).strip(),
-                    "rubro": str(eva.get("rubro", "")).strip(),
-                    "codigo_rubro": str(eva.get("codigo_rubro", "")).strip(),
                     "horario": str(eva.get("horario", "")).strip(),
                     "tiempo": eva.get("tiempo", ""),
                     "plazo": eva.get("plazo", ""),
@@ -757,14 +739,15 @@ def run_permisos_comercio():
 {{ds}}, {{fecha_ingreso}},  
 {{genero}}, {{genero2}}, {{genero3}},  
 {{nombre}}, {{dni}}, {{domicilio}},  
-{{giro}}, {{ubicacion}}, {{horario}}, {{rubro}}, {{codigo_rubro}},  
+{{giro}}, {{rubro}}, {{codigo_rubro}}, {{ubicacion}}, {{horario}},  
 {{cod_evaluacion}}, {{fecha_evaluacion}},  
-{{cod_certificacion}}, {{vigencia}}, {{antiguo_certificado}}, {{tiempo}}, {{plazo}}
+{{cod_certificacion}}, {{vigencia}}, {{antiguo_certificado}},  
+{{tiempo}}, {{plazo}}
 
 **Certificado (`certificado.docx`):**  
 {{codigo_certificado}}, {{ds}},  
 {{sr}}, {{nombre}}, {{dni}},  
-{{ubicacion}}, {{referencia}}, {{giro}}, {{rubro}}, {{codigo_rubro}},  
+{{ubicacion}}, {{referencia}}, {{giro}},  
 {{horario}},  
 {{tiempo}}, {{plazo}},  
 {{vigencia2}},  
@@ -773,7 +756,7 @@ def run_permisos_comercio():
         )
 
 
-# Para usar este archivo solo
+# Para usar este archivo solo (sin app_main.py)
 if __name__ == "__main__":
     st.set_page_config(
         page_title="Permisos (Evaluación, Resolución, Certificado)",
