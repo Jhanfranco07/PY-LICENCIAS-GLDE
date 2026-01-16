@@ -7,7 +7,7 @@ import io
 import os
 
 # ✅ CodeAPI para autocompletar DNI
-from integraciones.codeapi import CodeapiAPIError, consultar_dni
+from integraciones.codart import CodeapiAPIError, consultar_dni
 
 
 # ========= Utils =========
