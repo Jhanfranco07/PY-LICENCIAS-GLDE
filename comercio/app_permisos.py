@@ -2,9 +2,10 @@
 
 import io
 import os
-import traceback  # 👈 para ver tracebacks
+import traceback  # para ver tracebacks
 import pandas as pd
 import streamlit as st
+from io import BytesIO
 from docxtpl import DocxTemplate
 
 from integraciones.codart import (
@@ -14,7 +15,14 @@ from integraciones.codart import (
 )
 
 # 🔗 Google Sheets (dos hojas: Evaluaciones y Autorizaciones)
-from comercio.sheets_comercio import append_evaluacion, append_autorizacion
+from comercio.sheets_comercio import (
+    append_evaluacion,
+    append_autorizacion,
+    leer_evaluaciones,
+    escribir_evaluaciones,
+    leer_autorizaciones,
+    escribir_autorizaciones,
+)
 
 
 # ========= Utils locales =========
@@ -261,13 +269,9 @@ def _cb_autocomplete_dni():
 
         if nombre:
             st.session_state["nombre"] = nombre
-            st.session_state[
-                "dni_lookup_msg"
-            ] = "✅ DNI válido: nombre autocompletado."
+            st.session_state["dni_lookup_msg"] = "✅ DNI válido: nombre autocompletado."
         else:
-            st.session_state[
-                "dni_lookup_msg"
-            ] = "⚠️ DNI OK, pero no se encontró nombre."
+            st.session_state["dni_lookup_msg"] = "⚠️ DNI OK, pero no se encontró nombre."
     except ValueError as e:
         st.session_state["dni_lookup_msg"] = f"⚠️ {e}"
     except CodartAPIError as e:
@@ -675,8 +679,7 @@ def run_permisos_comercio():
                     "genero3": genero3,
                     "nombre": to_upper(eva.get("nombre", "")),
                     "dni": str(eva.get("dni", "")).strip(),
-                    "domicilio": to_upper(eva.get("domicilio", ""))
-                    + "-PACHACAMAC",
+                    "domicilio": to_upper(eva.get("domicilio", "")) + "-PACHACAMAC",
                     "giro": str(eva.get("giro", "")).strip(),
                     "rubro": str(eva.get("rubro", "")).strip(),
                     "codigo_rubro": str(eva.get("codigo_rubro", "")).strip(),
@@ -823,25 +826,25 @@ def run_permisos_comercio():
                             eva.get("fecha_ingreso_raw", "")
                         ),
                         ds=eva.get("ds", ""),
-                        nombre_completo=eva.get("nombre", ""),
+                        nombre=eva.get("nombre", ""),
                         dni=eva.get("dni", ""),
                         genero=eva.get("sexo", ""),
                         domicilio_fiscal=eva.get("domicilio", ""),
                         certificado_anterior=str(antiguo_cert or ""),
-                        fecha_emision_cert_ant=fmt_fecha_corta(
+                        fecha_emitida_cert_anterior=fmt_fecha_corta(
                             fecha_cert_ant_emision
                         ),
-                        fecha_caducidad_cert_ant=fmt_fecha_corta(
+                        fecha_caducidad_cert_anterior=fmt_fecha_corta(
                             fecha_cert_ant_cad
                         ),
-                        cod_evaluacion=eva.get("cod_evaluacion", ""),
-                        fecha_evaluacion=fmt_fecha_corta(
+                        num_eval=eva.get("cod_evaluacion", ""),
+                        fecha_eval=fmt_fecha_corta(
                             eva.get("fecha_evaluacion_raw", "")
                         ),
-                        cod_resolucion=str(cod_resolucion_val),
+                        num_resolucion=str(cod_resolucion_val),
                         fecha_resolucion=fmt_fecha_corta(fecha_resolucion_val),
-                        cod_certificacion=str(cod_cert_val),
-                        fecha_emision_cert=fmt_fecha_corta(fecha_cert_val),
+                        num_certificado=str(cod_cert_val),
+                        fecha_emitida_cert=fmt_fecha_corta(fecha_cert_val),
                         vigencia_autorizacion=vigencia_txt,
                         lugar_venta=eva.get("ubicacion", ""),
                         referencia=eva.get("referencia", ""),
@@ -855,13 +858,122 @@ def run_permisos_comercio():
                         "(hoja de Evaluaciones y hoja de Autorizaciones)."
                     )
                 except Exception as e:
-                    # 👇 DEBUG: mostramos traceback completo en Streamlit y consola
                     tb = traceback.format_exc()
                     st.error(f"No se pudo guardar en Google Sheets: {e}")
                     st.code(tb, language="python")
                     print("ERROR GUARDANDO EN SHEETS_COMERCIO:\n", tb)
 
     st.markdown("</div>", unsafe_allow_html=True)
+
+    # ---------- Módulo 5: Ver / editar BD (Google Sheets) ----------
+    st.markdown("---")
+    st.header("Ver / editar bases de datos (Google Sheets)")
+
+    # =========================
+    # BD Evaluaciones_CA
+    # =========================
+    st.subheader("Hoja: Evaluaciones_CA")
+
+    try:
+        df_eval = leer_evaluaciones()
+    except Exception as e:
+        df_eval = None
+        st.error(f"No se pudo leer la hoja de Evaluaciones: {e}")
+
+    if df_eval is not None and not df_eval.empty:
+        with st.expander("Ver / editar Evaluaciones"):
+            edited_eval = st.data_editor(
+                df_eval,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="editor_eval_ca",
+            )
+            st.caption(
+                "Puedes editar celdas o agregar / eliminar filas. "
+                "Luego guarda los cambios en la hoja de cálculo."
+            )
+
+            if st.button("💾 Guardar cambios en Evaluaciones_CA", key="btn_guardar_eval"):
+                try:
+                    escribir_evaluaciones(edited_eval)
+                    st.success("Cambios guardados correctamente en Evaluaciones_CA.")
+                except Exception as e:
+                    st.error(f"No se pudo actualizar Evaluaciones_CA: {e}")
+
+        buffer_eval = BytesIO()
+        with pd.ExcelWriter(buffer_eval, engine="openpyxl") as writer:
+            df_eval.to_excel(writer, sheet_name="Evaluaciones_CA", index=False)
+
+        buffer_eval.seek(0)
+
+        st.download_button(
+            "⬇️ Descargar Evaluaciones_CA como Excel",
+            data=buffer_eval,
+            file_name="BD_EVALUACIONES_CA.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-"
+                "officedocument.spreadsheetml.sheet"
+            ),
+        )
+    else:
+        st.info(
+            "Aún no hay registros en la hoja Evaluaciones_CA. "
+            "Cuando guardes un permiso, se empezará a llenar."
+        )
+
+    # =========================
+    # BD Autorizaciones_CA
+    # =========================
+    st.subheader("Hoja: Autorizaciones_CA")
+
+    try:
+        df_auto = leer_autorizaciones()
+    except Exception as e:
+        df_auto = None
+        st.error(f"No se pudo leer la hoja de Autorizaciones: {e}")
+
+    if df_auto is not None and not df_auto.empty:
+        with st.expander("Ver / editar Autorizaciones"):
+            edited_auto = st.data_editor(
+                df_auto,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="editor_auto_ca",
+            )
+            st.caption(
+                "Puedes editar celdas o agregar / eliminar filas. "
+                "Luego guarda los cambios en la hoja de cálculo."
+            )
+
+            if st.button(
+                "💾 Guardar cambios en Autorizaciones_CA", key="btn_guardar_auto"
+            ):
+                try:
+                    escribir_autorizaciones(edited_auto)
+                    st.success("Cambios guardados correctamente en Autorizaciones_CA.")
+                except Exception as e:
+                    st.error(f"No se pudo actualizar Autorizaciones_CA: {e}")
+
+        buffer_auto = BytesIO()
+        with pd.ExcelWriter(buffer_auto, engine="openpyxl") as writer:
+            df_auto.to_excel(writer, sheet_name="Autorizaciones_CA", index=False)
+
+        buffer_auto.seek(0)
+
+        st.download_button(
+            "⬇️ Descargar Autorizaciones_CA como Excel",
+            data=buffer_auto,
+            file_name="BD_AUTORIZACIONES_CA.xlsx",
+            mime=(
+                "application/vnd.openxmlformats-"
+                "officedocument.spreadsheetml.sheet"
+            ),
+        )
+    else:
+        st.info(
+            "Aún no hay registros en la hoja Autorizaciones_CA. "
+            "Cuando guardes un permiso, se empezará a llenar."
+        )
 
     # ---------- Ayuda ----------
     with st.expander("ℹ️ Llaves por plantilla (qué se llena)"):
