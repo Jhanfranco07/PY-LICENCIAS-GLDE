@@ -10,11 +10,12 @@ Manejo de Google Sheets para Comercio Ambulatorio (Evaluación + Autorización).
 
 from __future__ import annotations
 
-import pandas as pd
+from typing import List, Dict
+
 import gspread
+import pandas as pd
 import streamlit as st
 from google.oauth2.service_account import Credentials
-from typing import List, Dict
 
 # ---------------------------------------------------------------------------
 # CONFIG BÁSICA
@@ -47,7 +48,6 @@ COLUMNAS_EVALUACION: List[str] = [
     "FECHA DE AUTORIZACION",
 ]
 
-# *** LISTA ACTUALIZADA SEGÚN TU MENSAJE ***
 COLUMNAS_AUTORIZACION: List[str] = [
     "FECHA DE INGRESO",
     "D.S",
@@ -205,14 +205,14 @@ def append_evaluacion(
     Todas las fechas deben venir ya como string (ej. '16/01/2026').
     """
     fila = {
-        "NUMERO DE DOCUMENTO SIMPLE": num_ds,
-        "NOMBRES Y APELLIDOS": nombre_completo,
-        "N° DE EVALUACIÓN": cod_evaluacion,
-        "FECHA": fecha_eval,
-        "N° DE RESOLUCIÓN": cod_resolucion,
-        "FECHA DE RESOLUCIÓN": fecha_resolucion,
-        "N° DE AUTORIZACIÓN": num_autorizacion,
-        "FECHA DE AUTORIZACION": fecha_autorizacion,
+        "NUMERO DE DOCUMENTO SIMPLE": num_ds or "",
+        "NOMBRES Y APELLIDOS": nombre_completo or "",
+        "N° DE EVALUACIÓN": cod_evaluacion or "",
+        "FECHA": fecha_eval or "",
+        "N° DE RESOLUCIÓN": cod_resolucion or "",
+        "FECHA DE RESOLUCIÓN": fecha_resolucion or "",
+        "N° DE AUTORIZACIÓN": num_autorizacion or "",
+        "FECHA DE AUTORIZACION": fecha_autorizacion or "",
     }
 
     _append_fila(
@@ -240,19 +240,19 @@ def append_autorizacion(
     *,
     fecha_ingreso: str,
     ds: str,
-    nombre: str,
+    nombre_completo: str,
     dni: str,
     genero: str,
     domicilio_fiscal: str,
     certificado_anterior: str,
-    fecha_emitida_cert_anterior: str,
-    fecha_caducidad_cert_anterior: str,
-    num_eval: str,
-    fecha_eval: str,
-    num_resolucion: str,
+    fecha_emision_cert_ant: str,
+    fecha_caducidad_cert_ant: str,
+    cod_evaluacion: str,
+    fecha_evaluacion: str,
+    cod_resolucion: str,
     fecha_resolucion: str,
-    num_certificado: str,
-    fecha_emitida_cert: str,
+    cod_certificacion: str,
+    fecha_emision_cert: str,
     vigencia_autorizacion: str,
     lugar_venta: str,
     referencia: str,
@@ -267,27 +267,27 @@ def append_autorizacion(
     (fechas tipo '16/01/2026', etc.).
     """
     fila = {
-        "FECHA DE INGRESO": fecha_ingreso,
-        "D.S": ds,
-        "NOMBRE Y APELLIDO": nombre,
-        "DNI": dni,
-        "GENERO": genero,
-        "DOMICILIO FISCAL": domicilio_fiscal,
-        "CERTIFICADO ANTERIOR": certificado_anterior,
-        "FECHA EMITIDA CERTIFICADO ANTERIOR": fecha_emitida_cert_anterior,
-        "FECHA DE CADUCIDAD CERTIFICADO ANTERIOR": fecha_caducidad_cert_anterior,
-        "N° DE EVALUACION": num_eval,
-        "FECHA DE EVALUACION": fecha_eval,
-        "N° DE RESOLUCIÓN": num_resolucion,
-        "FECHA RESOLUCIÓN": fecha_resolucion,
-        "N° DE CERTIFICADO": num_certificado,
-        "FECHA EMITIDA CERTIFICADO": fecha_emitida_cert,
-        "VIGENCIA DE AUTORIZACIÓN": vigencia_autorizacion,
-        "LUGAR DE VENTA": lugar_venta,
-        "REFERENCIA": referencia,
-        "GIRO": giro,
-        "HORARIO": horario,
-        "N° TELEFONO": telefono,
+        "FECHA DE INGRESO": fecha_ingreso or "",
+        "D.S": ds or "",
+        "NOMBRE Y APELLIDO": nombre_completo or "",
+        "DNI": dni or "",
+        "GENERO": genero or "",
+        "DOMICILIO FISCAL": domicilio_fiscal or "",
+        "CERTIFICADO ANTERIOR": certificado_anterior or "",
+        "FECHA EMITIDA CERTIFICADO ANTERIOR": fecha_emision_cert_ant or "",
+        "FECHA DE CADUCIDAD CERTIFICADO ANTERIOR": fecha_caducidad_cert_ant or "",
+        "N° DE EVALUACION": cod_evaluacion or "",
+        "FECHA DE EVALUACION": fecha_evaluacion or "",
+        "N° DE RESOLUCIÓN": cod_resolucion or "",
+        "FECHA RESOLUCIÓN": fecha_resolucion or "",
+        "N° DE CERTIFICADO": cod_certificacion or "",
+        "FECHA EMITIDA CERTIFICADO": fecha_emision_cert or "",
+        "VIGENCIA DE AUTORIZACIÓN": vigencia_autorizacion or "",
+        "LUGAR DE VENTA": lugar_venta or "",
+        "REFERENCIA": referencia or "",
+        "GIRO": giro or "",
+        "HORARIO": horario or "",
+        "N° TELEFONO": telefono or "",
     }
 
     _append_fila(
