@@ -2,10 +2,10 @@
 
 import io
 import os
-import traceback  # para ver tracebacks
+import traceback
+
 import pandas as pd
 import streamlit as st
-from io import BytesIO
 from docxtpl import DocxTemplate
 
 from integraciones.codart import (
@@ -14,16 +14,15 @@ from integraciones.codart import (
     dni_a_nombre_completo,
 )
 
-# 🔗 Google Sheets (dos hojas: Evaluaciones y Autorizaciones)
 from comercio.sheets_comercio import (
     append_evaluacion,
     append_autorizacion,
-    leer_evaluaciones,
-    escribir_evaluaciones,
-    leer_autorizaciones,
-    escribir_autorizaciones,
+    documentos_para_evaluacion,
+    actualizar_estado_documento,
+    autorizaciones_pendientes_resolucion,
+    actualizar_evaluacion_con_resolucion,
+    actualizar_autorizacion_resolucion_y_cert,
 )
-
 
 # ========= Utils locales =========
 def asegurar_dirs():
@@ -85,6 +84,16 @@ def build_vigencia2(fi, ff) -> str:
     i = fmt_fecha_corta(fi)
     f = fmt_fecha_corta(ff)
     return f"{i} - {f}" if i and f else ""
+
+
+def _parse_fecha_ddmmaaaa(val):
+    """
+    Intenta parsear '16/01/2026' → date. Si falla, devuelve None.
+    """
+    try:
+        return pd.to_datetime(val, dayfirst=True).date()
+    except Exception:
+        return None
 
 
 def render_doc(context: dict, filename_stem: str, plantilla_path: str):
@@ -269,9 +278,13 @@ def _cb_autocomplete_dni():
 
         if nombre:
             st.session_state["nombre"] = nombre
-            st.session_state["dni_lookup_msg"] = "✅ DNI válido: nombre autocompletado."
+            st.session_state[
+                "dni_lookup_msg"
+            ] = "✅ DNI válido: nombre autocompletado."
         else:
-            st.session_state["dni_lookup_msg"] = "⚠️ DNI OK, pero no se encontró nombre."
+            st.session_state["dni_lookup_msg"] = (
+                "⚠️ DNI OK, pero no se encontró nombre."
+            )
     except ValueError as e:
         st.session_state["dni_lookup_msg"] = f"⚠️ {e}"
     except CodartAPIError as e:
@@ -313,6 +326,63 @@ def run_permisos_comercio():
     # ---------- Módulo 1: EVALUACIÓN ----------
     st.header("Módulo 1 · Evaluación")
     st.markdown('<div class="card">', unsafe_allow_html=True)
+
+    # ----- 1.1 Selección de Documento Simple pendiente (opcional) -----
+    st.subheader("1.1 Seleccionar Documento Simple pendiente (opcional)")
+
+    try:
+        df_docs = documentos_para_evaluacion()
+    except Exception as e:
+        df_docs = pd.DataFrame()
+        st.error(f"No se pudo leer Documentos_CA: {e}")
+
+    if df_docs is None or df_docs.empty:
+        st.caption("No hay Documentos Simples procedentes pendientes.")
+    else:
+        opciones = [
+            f"{row['N° DE DOCUMENTO SIMPLE']} · {row['NOMBRE Y APELLIDO']} "
+            f"({row['ASUNTO']})"
+            for _, row in df_docs.iterrows()
+        ]
+        idx_sel = st.selectbox(
+            "Documentos Simples para evaluar",
+            options=list(range(len(opciones))),
+            format_func=lambda i: opciones[i],
+            key="idx_ds_eval",
+        )
+
+        if st.button("📥 Cargar datos del D.S. seleccionado"):
+            fila = df_docs.iloc[int(idx_sel)]
+            st.session_state["ds"] = str(
+                fila.get("N° DE DOCUMENTO SIMPLE", "")
+            )
+            st.session_state["nombre"] = fila.get("NOMBRE Y APELLIDO", "")
+            st.session_state["dni"] = str(fila.get("DNI", "")).strip()
+            st.session_state["domicilio"] = fila.get(
+                "DOMICILIO FISCAL", ""
+            )
+            st.session_state["ubicacion"] = fila.get(
+                "UBICACIÓN A SOLICITAR", ""
+            )
+            st.session_state["telefono"] = str(
+                fila.get("N° DE CELULAR", "")
+            ).strip()
+            st.session_state["referencia"] = fila.get(
+                "GIRO O MOTIVO DE LA SOLICITUD", ""
+            )
+
+            # Fechas
+            st.session_state["fecha_ingreso"] = _parse_fecha_ddmmaaaa(
+                fila.get("FECHA DE INGRESO", "")
+            )
+
+            st.success(
+                "Datos del Documento Simple cargados en el formulario."
+            )
+
+    st.markdown("---")
+
+    # ----- 1.2 Formulario de Evaluación -----
 
     # DNI primero para autocompletar nombre
     dni = st.text_input(
@@ -504,10 +574,59 @@ def run_permisos_comercio():
     st.header("Módulo 2 · Resolución")
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
+    # Opción para cargar evaluación desde BD (Autorizaciones pendientes)
+    with st.expander("📂 Cargar evaluación pendiente desde BD (opcional)"):
+        try:
+            df_auto_pend = autorizaciones_pendientes_resolucion()
+        except Exception as e:
+            df_auto_pend = pd.DataFrame()
+            st.error(f"No se pudo leer Autorizaciones_CA: {e}")
+
+        if df_auto_pend is None or df_auto_pend.empty:
+            st.caption("No hay evaluaciones pendientes de resolución.")
+        else:
+            opciones_res = [
+                f"EV {row['N° DE EVALUACION']} · {row['NOMBRE Y APELLIDO']} "
+                f"(DNI {row['DNI']})"
+                for _, row in df_auto_pend.iterrows()
+            ]
+            idx_res = st.selectbox(
+                "Seleccionar evaluación desde BD",
+                options=list(range(len(opciones_res))),
+                format_func=lambda i: opciones_res[i],
+                key="idx_eval_bd",
+            )
+            if st.button("Usar evaluación seleccionada", key="btn_cargar_eval_bd"):
+                fila = df_auto_pend.iloc[int(idx_res)]
+                eva_bd = {
+                    "sexo": fila.get("GENERO", "Femenino"),
+                    "cod_evaluacion": fila.get("N° DE EVALUACION", ""),
+                    "nombre": fila.get("NOMBRE Y APELLIDO", ""),
+                    "dni": str(fila.get("DNI", "")).strip(),
+                    "ds": fila.get("D.S", ""),
+                    "domicilio": fila.get("DOMICILIO FISCAL", ""),
+                    "fecha_ingreso_raw": fila.get("FECHA DE INGRESO", ""),
+                    "fecha_evaluacion_raw": fila.get("FECHA DE EVALUACION", ""),
+                    "fecha_ingreso": fila.get("FECHA DE INGRESO", ""),
+                    "fecha_evaluacion": fila.get("FECHA DE EVALUACION", ""),
+                    "giro": fila.get("GIRO", ""),
+                    "ubicacion": fila.get("LUGAR DE VENTA", ""),
+                    "referencia": fila.get("REFERENCIA", ""),
+                    "horario": fila.get("HORARIO", ""),
+                    "telefono": fila.get("N° TELEFONO", ""),
+                    "tiempo": fila.get("TIEMPO", ""),
+                    "plazo": fila.get("PLAZO", ""),
+                    # rubro / codigo_rubro podrían no estar, se dejan vacíos
+                    "rubro": "",
+                    "codigo_rubro": "",
+                }
+                st.session_state["eval_ctx"] = eva_bd
+                st.success("Evaluación cargada desde BD.")
+
     eva = st.session_state.get("eval_ctx", {})
     if not eva:
         st.warning(
-            "Primero completa y guarda la **Evaluación**. "
+            "Primero completa y guarda la **Evaluación** (o cárgala desde BD). "
             "Aquí solo pedimos lo propio de la Resolución."
         )
     else:
@@ -615,10 +734,14 @@ def run_permisos_comercio():
             st.info("Por defecto NO necesitas tocar nada aquí.")
             eva["ds"] = st.text_input("DS (override opcional)", value=eva.get("ds", ""))
             eva["nombre"] = to_upper(
-                st.text_input("Nombre (override opcional)", value=eva.get("nombre", ""))
+                st.text_input(
+                    "Nombre (override opcional)", value=eva.get("nombre", "")
+                )
             )
             eva["dni"] = st.text_input(
-                "DNI (override opcional)", value=eva.get("dni", ""), max_chars=8
+                "DNI (override opcional)",
+                value=eva.get("dni", ""),
+                max_chars=8,
             )
             eva["domicilio"] = to_upper(
                 st.text_input(
@@ -637,6 +760,7 @@ def run_permisos_comercio():
             eva["telefono"] = st.text_input(
                 "Teléfono (override opcional)", value=eva.get("telefono", "")
             )
+            st.session_state["eval_ctx"] = eva  # guarda cambios
 
         def plantilla_por_tipo(t):
             return (
@@ -662,7 +786,9 @@ def run_permisos_comercio():
             ):
                 st.error("DNI inválido (8 dígitos)")
             elif not eva.get("horario"):
-                st.error("Falta **Horario** en Evaluación (o en Ediciones rápidas).")
+                st.error(
+                    "Falta **Horario** en Evaluación (o en Ediciones rápidas)."
+                )
             elif falt:
                 st.error("Faltan campos de Resolución: " + ", ".join(falt))
             else:
@@ -673,13 +799,16 @@ def run_permisos_comercio():
                     "cod_resolucion": str(cod_resolucion).strip(),
                     "fecha_resolucion": fmt_fecha_larga(fecha_resolucion),
                     "ds": str(eva.get("ds", "")).strip(),
-                    "fecha_ingreso": fmt_fecha_corta(eva.get("fecha_ingreso_raw")),
+                    "fecha_ingreso": fmt_fecha_corta(
+                        eva.get("fecha_ingreso_raw")
+                    ),
                     "genero": genero,
                     "genero2": genero2,
                     "genero3": genero3,
                     "nombre": to_upper(eva.get("nombre", "")),
                     "dni": str(eva.get("dni", "")).strip(),
-                    "domicilio": to_upper(eva.get("domicilio", "")) + "-PACHACAMAC",
+                    "domicilio": to_upper(eva.get("domicilio", ""))
+                    + "-PACHACAMAC",
                     "giro": str(eva.get("giro", "")).strip(),
                     "rubro": str(eva.get("rubro", "")).strip(),
                     "codigo_rubro": str(eva.get("codigo_rubro", "")).strip(),
@@ -762,15 +891,86 @@ def run_permisos_comercio():
                     TPL_CERT,
                 )
 
-    # ---------- Módulo 4: Guardar en BD (Google Sheets) ----------
+    # ---------- Módulo 4: Base de Datos (Google Sheets) ----------
     st.markdown("---")
-    st.header("Guardar en Base de Datos (Google Sheets)")
+    st.header("Módulo 4 · Base de Datos (Google Sheets)")
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    if st.button("💾 Guardar Evaluación + Autorización en BD (Google Sheets)"):
-        eva = st.session_state.get("eval_ctx", {})
+    eva = st.session_state.get("eval_ctx", {})
+
+    # 4.1 Guardar SOLO Evaluación
+    st.subheader("4.1 Guardar SOLO Evaluación")
+
+    if st.button("💾 Guardar Evaluación en BD"):
         if not eva:
             st.error("Primero genera la **Evaluación**.")
+        else:
+            try:
+                # Hoja 1: Evaluaciones_CA (solo datos de evaluación)
+                append_evaluacion(
+                    num_ds=eva.get("ds", ""),
+                    nombre_completo=eva.get("nombre", ""),
+                    cod_evaluacion=eva.get("cod_evaluacion", ""),
+                    fecha_eval=fmt_fecha_corta(eva.get("fecha_evaluacion_raw", "")),
+                    cod_resolucion="",
+                    fecha_resolucion="",
+                    num_autorizacion="",
+                    fecha_autorizacion="",
+                )
+
+                # Hoja 2: Autorizaciones_CA (datos de evaluación, sin resolución aún)
+                append_autorizacion(
+                    fecha_ingreso=fmt_fecha_corta(eva.get("fecha_ingreso_raw", "")),
+                    ds=eva.get("ds", ""),
+                    nombre=eva.get("nombre", ""),
+                    dni=eva.get("dni", ""),
+                    genero=eva.get("sexo", ""),
+                    domicilio_fiscal=eva.get("domicilio", ""),
+                    certificado_anterior="",
+                    fecha_emitida_cert_anterior="",
+                    fecha_caducidad_cert_anterior="",
+                    num_eval=eva.get("cod_evaluacion", ""),
+                    fecha_eval=fmt_fecha_corta(
+                        eva.get("fecha_evaluacion_raw", "")
+                    ),
+                    num_resolucion="",
+                    fecha_resolucion="",
+                    num_certificado="",
+                    fecha_emitida_cert="",
+                    vigencia_autorizacion="",
+                    lugar_venta=eva.get("ubicacion", ""),
+                    referencia=eva.get("referencia", ""),
+                    giro=eva.get("giro", ""),
+                    horario=eva.get("horario", ""),
+                    telefono=eva.get("telefono", ""),
+                    tiempo=str(eva.get("tiempo", "")),
+                    plazo=str(eva.get("plazo", "")),
+                )
+
+                # Actualiza estado del DS (si aplica)
+                if eva.get("ds"):
+                    actualizar_estado_documento(
+                        eva.get("ds", ""), "EN EVALUACION"
+                    )
+
+                st.success(
+                    "Evaluación guardada en Google Sheets "
+                    "(Evaluaciones_CA y Autorizaciones_CA)."
+                )
+            except Exception as e:
+                tb = traceback.format_exc()
+                st.error(f"No se pudo guardar la Evaluación en BD: {e}")
+                st.code(tb, language="python")
+
+    st.markdown("---")
+
+    # 4.2 Guardar Resolución + Certificado
+    st.subheader("4.2 Guardar Resolución + Certificado")
+
+    if st.button("💾 Guardar Resolución + Certificado en BD"):
+        eva = st.session_state.get("eval_ctx", {})
+        if not eva:
+            st.error("Primero genera/carga la **Evaluación**.")
         else:
             cod_resolucion_val = st.session_state.get("cod_resolucion", "")
             fecha_resolucion_val = st.session_state.get("fecha_resolucion", None)
@@ -803,33 +1003,23 @@ def run_permisos_comercio():
                 )
             else:
                 try:
-                    # --- Hoja 1: Evaluaciones ---
-                    append_evaluacion(
-                        num_ds=eva.get("ds", ""),
-                        nombre_completo=eva.get("nombre", ""),
+                    # Actualiza Evaluaciones_CA con info de resolución/autorización
+                    actualizar_evaluacion_con_resolucion(
                         cod_evaluacion=eva.get("cod_evaluacion", ""),
-                        # FECHA (usamos fecha de evaluación en formato corto)
-                        fecha_eval=fmt_fecha_corta(
-                            eva.get("fecha_evaluacion_raw", "")
-                        ),
                         cod_resolucion=str(cod_resolucion_val),
                         fecha_resolucion=fmt_fecha_corta(fecha_resolucion_val),
                         num_autorizacion=str(cod_cert_val),
                         fecha_autorizacion=fmt_fecha_corta(fecha_cert_val),
                     )
 
-                    # --- Hoja 2: Autorizaciones ---
-                    vigencia_txt = build_vigencia(res_vig_ini_val, res_vig_fin_val)
+                    # Texto de vigencia
+                    vigencia_txt = build_vigencia(
+                        res_vig_ini_val, res_vig_fin_val
+                    )
 
-                    append_autorizacion(
-                        fecha_ingreso=fmt_fecha_corta(
-                            eva.get("fecha_ingreso_raw", "")
-                        ),
-                        ds=eva.get("ds", ""),
-                        nombre=eva.get("nombre", ""),
-                        dni=eva.get("dni", ""),
-                        genero=eva.get("sexo", ""),
-                        domicilio_fiscal=eva.get("domicilio", ""),
+                    # Completa la fila ya creada en Autorizaciones_CA
+                    actualizar_autorizacion_resolucion_y_cert(
+                        num_eval=eva.get("cod_evaluacion", ""),
                         certificado_anterior=str(antiguo_cert or ""),
                         fecha_emitida_cert_anterior=fmt_fecha_corta(
                             fecha_cert_ant_emision
@@ -837,143 +1027,30 @@ def run_permisos_comercio():
                         fecha_caducidad_cert_anterior=fmt_fecha_corta(
                             fecha_cert_ant_cad
                         ),
-                        num_eval=eva.get("cod_evaluacion", ""),
-                        fecha_eval=fmt_fecha_corta(
-                            eva.get("fecha_evaluacion_raw", "")
-                        ),
                         num_resolucion=str(cod_resolucion_val),
                         fecha_resolucion=fmt_fecha_corta(fecha_resolucion_val),
                         num_certificado=str(cod_cert_val),
                         fecha_emitida_cert=fmt_fecha_corta(fecha_cert_val),
                         vigencia_autorizacion=vigencia_txt,
-                        lugar_venta=eva.get("ubicacion", ""),
-                        referencia=eva.get("referencia", ""),
-                        giro=eva.get("giro", ""),
-                        horario=eva.get("horario", ""),
-                        telefono=eva.get("telefono", ""),
                     )
 
+                    # Cambia estado del DS a AUTORIZADO
+                    if eva.get("ds"):
+                        actualizar_estado_documento(
+                            eva.get("ds", ""), "AUTORIZADO"
+                        )
+
                     st.success(
-                        "Registros guardados en Google Sheets "
-                        "(hoja de Evaluaciones y hoja de Autorizaciones)."
+                        "Resolución y Certificado guardados en Google Sheets."
                     )
                 except Exception as e:
                     tb = traceback.format_exc()
-                    st.error(f"No se pudo guardar en Google Sheets: {e}")
+                    st.error(
+                        f"No se pudo guardar Resolución + Certificado en BD: {e}"
+                    )
                     st.code(tb, language="python")
-                    print("ERROR GUARDANDO EN SHEETS_COMERCIO:\n", tb)
 
     st.markdown("</div>", unsafe_allow_html=True)
-
-    # ---------- Módulo 5: Ver / editar BD (Google Sheets) ----------
-    st.markdown("---")
-    st.header("Ver / editar bases de datos (Google Sheets)")
-
-    # =========================
-    # BD Evaluaciones_CA
-    # =========================
-    st.subheader("Hoja: Evaluaciones_CA")
-
-    try:
-        df_eval = leer_evaluaciones()
-    except Exception as e:
-        df_eval = None
-        st.error(f"No se pudo leer la hoja de Evaluaciones: {e}")
-
-    if df_eval is not None and not df_eval.empty:
-        with st.expander("Ver / editar Evaluaciones"):
-            edited_eval = st.data_editor(
-                df_eval,
-                num_rows="dynamic",
-                use_container_width=True,
-                key="editor_eval_ca",
-            )
-            st.caption(
-                "Puedes editar celdas o agregar / eliminar filas. "
-                "Luego guarda los cambios en la hoja de cálculo."
-            )
-
-            if st.button("💾 Guardar cambios en Evaluaciones_CA", key="btn_guardar_eval"):
-                try:
-                    escribir_evaluaciones(edited_eval)
-                    st.success("Cambios guardados correctamente en Evaluaciones_CA.")
-                except Exception as e:
-                    st.error(f"No se pudo actualizar Evaluaciones_CA: {e}")
-
-        buffer_eval = BytesIO()
-        with pd.ExcelWriter(buffer_eval, engine="openpyxl") as writer:
-            df_eval.to_excel(writer, sheet_name="Evaluaciones_CA", index=False)
-
-        buffer_eval.seek(0)
-
-        st.download_button(
-            "⬇️ Descargar Evaluaciones_CA como Excel",
-            data=buffer_eval,
-            file_name="BD_EVALUACIONES_CA.xlsx",
-            mime=(
-                "application/vnd.openxmlformats-"
-                "officedocument.spreadsheetml.sheet"
-            ),
-        )
-    else:
-        st.info(
-            "Aún no hay registros en la hoja Evaluaciones_CA. "
-            "Cuando guardes un permiso, se empezará a llenar."
-        )
-
-    # =========================
-    # BD Autorizaciones_CA
-    # =========================
-    st.subheader("Hoja: Autorizaciones_CA")
-
-    try:
-        df_auto = leer_autorizaciones()
-    except Exception as e:
-        df_auto = None
-        st.error(f"No se pudo leer la hoja de Autorizaciones: {e}")
-
-    if df_auto is not None and not df_auto.empty:
-        with st.expander("Ver / editar Autorizaciones"):
-            edited_auto = st.data_editor(
-                df_auto,
-                num_rows="dynamic",
-                use_container_width=True,
-                key="editor_auto_ca",
-            )
-            st.caption(
-                "Puedes editar celdas o agregar / eliminar filas. "
-                "Luego guarda los cambios en la hoja de cálculo."
-            )
-
-            if st.button(
-                "💾 Guardar cambios en Autorizaciones_CA", key="btn_guardar_auto"
-            ):
-                try:
-                    escribir_autorizaciones(edited_auto)
-                    st.success("Cambios guardados correctamente en Autorizaciones_CA.")
-                except Exception as e:
-                    st.error(f"No se pudo actualizar Autorizaciones_CA: {e}")
-
-        buffer_auto = BytesIO()
-        with pd.ExcelWriter(buffer_auto, engine="openpyxl") as writer:
-            df_auto.to_excel(writer, sheet_name="Autorizaciones_CA", index=False)
-
-        buffer_auto.seek(0)
-
-        st.download_button(
-            "⬇️ Descargar Autorizaciones_CA como Excel",
-            data=buffer_auto,
-            file_name="BD_AUTORIZACIONES_CA.xlsx",
-            mime=(
-                "application/vnd.openxmlformats-"
-                "officedocument.spreadsheetml.sheet"
-            ),
-        )
-    else:
-        st.info(
-            "Aún no hay registros en la hoja Autorizaciones_CA. "
-            "Cuando guardes un permiso, se empezará a llenar."
-        )
 
     # ---------- Ayuda ----------
     with st.expander("ℹ️ Llaves por plantilla (qué se llena)"):

@@ -1,11 +1,12 @@
-# sheets_comercio.py
+# comercio/sheets_comercio.py
 """
-Manejo de Google Sheets para Comercio Ambulatorio (Evaluación + Autorización).
+Manejo de Google Sheets para Comercio Ambulatorio:
 
-- Usa st.secrets["gcp_service_account"] como en ANUNCIOS.
-- En UN solo Google Sheets se crean / usan dos hojas:
+- Un solo Google Sheets (SPREADSHEET_ID_COMERCIO).
+- Tres hojas:
     • Evaluaciones_CA
     • Autorizaciones_CA
+    • Documentos_CA  (registro de Documentos Simples)
 """
 
 from __future__ import annotations
@@ -21,11 +22,12 @@ from google.oauth2.service_account import Credentials
 # CONFIG BÁSICA
 # ---------------------------------------------------------------------------
 
-# 👉 PON AQUÍ el ID del Google Sheets de COMERCIO AMBULATORIO
+# 👉 ID del Google Sheets de COMERCIO AMBULATORIO
 SPREADSHEET_ID_COMERCIO = "1Sd9f0PTfGvFsOPQhA32hUp2idcdkX_LVYQ-bAX2nYU8"
 
 EVAL_SHEET_NAME = "Evaluaciones_CA"
 AUTO_SHEET_NAME = "Autorizaciones_CA"
+DOCS_SHEET_NAME = "Documentos_CA"
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -70,6 +72,27 @@ COLUMNAS_AUTORIZACION: List[str] = [
     "GIRO",
     "HORARIO",
     "N° TELEFONO",
+    "TIEMPO",
+    "PLAZO",
+]
+
+COLUMNAS_DOCUMENTOS: List[str] = [
+    "ESTADO",
+    "N°",
+    "FECHA DE INGRESO",
+    "N° DE DOCUMENTO SIMPLE",
+    "ASUNTO",
+    "NOMBRE Y APELLIDO",
+    "DNI",
+    "DOMICILIO FISCAL",
+    "GIRO O MOTIVO DE LA SOLICITUD",
+    "UBICACIÓN A SOLICITAR",
+    "N° DE CELULAR",
+    "PROCEDENTE / IMPROCEDENTE",
+    "N° DE CARTA",
+    "FECHA DE LA CARTA",
+    "FECHA DE NOTIFICACION",
+    "FOLIOS",
 ]
 
 # ---------------------------------------------------------------------------
@@ -128,6 +151,7 @@ def _leer_df(sheet_name: str, columnas: List[str]) -> pd.DataFrame:
 
     df = pd.DataFrame(filas, columns=header)
 
+    # Asegura que existan todas las columnas esperadas
     for col in columnas:
         if col not in df.columns:
             df[col] = ""
@@ -177,7 +201,7 @@ def _append_fila(
 
 
 # ---------------------------------------------------------------------------
-# API PÚBLICA – EVALUACIONES
+# API – EVALUACIONES
 # ---------------------------------------------------------------------------
 
 
@@ -205,14 +229,14 @@ def append_evaluacion(
     Todas las fechas deben venir ya como string (ej. '16/01/2026').
     """
     fila = {
-        "NUMERO DE DOCUMENTO SIMPLE": num_ds or "",
-        "NOMBRES Y APELLIDOS": nombre_completo or "",
-        "N° DE EVALUACIÓN": cod_evaluacion or "",
-        "FECHA": fecha_eval or "",
-        "N° DE RESOLUCIÓN": cod_resolucion or "",
-        "FECHA DE RESOLUCIÓN": fecha_resolucion or "",
-        "N° DE AUTORIZACIÓN": num_autorizacion or "",
-        "FECHA DE AUTORIZACION": fecha_autorizacion or "",
+        "NUMERO DE DOCUMENTO SIMPLE": num_ds,
+        "NOMBRES Y APELLIDOS": nombre_completo,
+        "N° DE EVALUACIÓN": cod_evaluacion,
+        "FECHA": fecha_eval,
+        "N° DE RESOLUCIÓN": cod_resolucion,
+        "FECHA DE RESOLUCIÓN": fecha_resolucion,
+        "N° DE AUTORIZACIÓN": num_autorizacion,
+        "FECHA DE AUTORIZACION": fecha_autorizacion,
     }
 
     _append_fila(
@@ -223,8 +247,47 @@ def append_evaluacion(
     )
 
 
+def actualizar_evaluacion_con_resolucion(
+    *,
+    cod_evaluacion: str,
+    cod_resolucion: str,
+    fecha_resolucion: str,
+    num_autorizacion: str,
+    fecha_autorizacion: str,
+) -> None:
+    """
+    Actualiza la fila de Evaluaciones_CA correspondiente al N° de Evaluación.
+    """
+    df = leer_evaluaciones()
+    if df.empty:
+        return
+
+    mask = df["N° DE EVALUACIÓN"].astype(str) == str(cod_evaluacion)
+    if not mask.any():
+        return
+
+    df.loc[mask, "N° DE RESOLUCIÓN"] = cod_resolucion
+    df.loc[mask, "FECHA DE RESOLUCIÓN"] = fecha_resolucion
+    df.loc[mask, "N° DE AUTORIZACIÓN"] = num_autorizacion
+    df.loc[mask, "FECHA DE AUTORIZACION"] = fecha_autorizacion
+
+    escribir_evaluaciones(df)
+
+
+def evaluaciones_sin_resolucion() -> pd.DataFrame:
+    """
+    Devuelve evaluaciones que aún no tienen N° de Resolución.
+    """
+    df = leer_evaluaciones()
+    if df.empty:
+        return df
+
+    mask = df["N° DE RESOLUCIÓN"].astype(str).str.strip() == ""
+    return df[mask].copy()
+
+
 # ---------------------------------------------------------------------------
-# API PÚBLICA – AUTORIZACIONES
+# API – AUTORIZACIONES
 # ---------------------------------------------------------------------------
 
 
@@ -240,25 +303,27 @@ def append_autorizacion(
     *,
     fecha_ingreso: str,
     ds: str,
-    nombre_completo: str,
+    nombre: str,
     dni: str,
     genero: str,
     domicilio_fiscal: str,
     certificado_anterior: str,
-    fecha_emision_cert_ant: str,
-    fecha_caducidad_cert_ant: str,
-    cod_evaluacion: str,
-    fecha_evaluacion: str,
-    cod_resolucion: str,
+    fecha_emitida_cert_anterior: str,
+    fecha_caducidad_cert_anterior: str,
+    num_eval: str,
+    fecha_eval: str,
+    num_resolucion: str,
     fecha_resolucion: str,
-    cod_certificacion: str,
-    fecha_emision_cert: str,
+    num_certificado: str,
+    fecha_emitida_cert: str,
     vigencia_autorizacion: str,
     lugar_venta: str,
     referencia: str,
     giro: str,
     horario: str,
     telefono: str = "",
+    tiempo: str = "",
+    plazo: str = "",
 ) -> None:
     """
     Agrega una fila a Autorizaciones_CA.
@@ -267,27 +332,29 @@ def append_autorizacion(
     (fechas tipo '16/01/2026', etc.).
     """
     fila = {
-        "FECHA DE INGRESO": fecha_ingreso or "",
-        "D.S": ds or "",
-        "NOMBRE Y APELLIDO": nombre_completo or "",
-        "DNI": dni or "",
-        "GENERO": genero or "",
-        "DOMICILIO FISCAL": domicilio_fiscal or "",
-        "CERTIFICADO ANTERIOR": certificado_anterior or "",
-        "FECHA EMITIDA CERTIFICADO ANTERIOR": fecha_emision_cert_ant or "",
-        "FECHA DE CADUCIDAD CERTIFICADO ANTERIOR": fecha_caducidad_cert_ant or "",
-        "N° DE EVALUACION": cod_evaluacion or "",
-        "FECHA DE EVALUACION": fecha_evaluacion or "",
-        "N° DE RESOLUCIÓN": cod_resolucion or "",
-        "FECHA RESOLUCIÓN": fecha_resolucion or "",
-        "N° DE CERTIFICADO": cod_certificacion or "",
-        "FECHA EMITIDA CERTIFICADO": fecha_emision_cert or "",
-        "VIGENCIA DE AUTORIZACIÓN": vigencia_autorizacion or "",
-        "LUGAR DE VENTA": lugar_venta or "",
-        "REFERENCIA": referencia or "",
-        "GIRO": giro or "",
-        "HORARIO": horario or "",
-        "N° TELEFONO": telefono or "",
+        "FECHA DE INGRESO": fecha_ingreso,
+        "D.S": ds,
+        "NOMBRE Y APELLIDO": nombre,
+        "DNI": dni,
+        "GENERO": genero,
+        "DOMICILIO FISCAL": domicilio_fiscal,
+        "CERTIFICADO ANTERIOR": certificado_anterior,
+        "FECHA EMITIDA CERTIFICADO ANTERIOR": fecha_emitida_cert_anterior,
+        "FECHA DE CADUCIDAD CERTIFICADO ANTERIOR": fecha_caducidad_cert_anterior,
+        "N° DE EVALUACION": num_eval,
+        "FECHA DE EVALUACION": fecha_eval,
+        "N° DE RESOLUCIÓN": num_resolucion,
+        "FECHA RESOLUCIÓN": fecha_resolucion,
+        "N° DE CERTIFICADO": num_certificado,
+        "FECHA EMITIDA CERTIFICADO": fecha_emitida_cert,
+        "VIGENCIA DE AUTORIZACIÓN": vigencia_autorizacion,
+        "LUGAR DE VENTA": lugar_venta,
+        "REFERENCIA": referencia,
+        "GIRO": giro,
+        "HORARIO": horario,
+        "N° TELEFONO": telefono,
+        "TIEMPO": tiempo,
+        "PLAZO": plazo,
     }
 
     _append_fila(
@@ -296,3 +363,163 @@ def append_autorizacion(
         fila,
         auto_numero_col=None,  # aquí no hay columna "N°"
     )
+
+
+def actualizar_autorizacion_resolucion_y_cert(
+    *,
+    num_eval: str,
+    certificado_anterior: str,
+    fecha_emitida_cert_anterior: str,
+    fecha_caducidad_cert_anterior: str,
+    num_resolucion: str,
+    fecha_resolucion: str,
+    num_certificado: str,
+    fecha_emitida_cert: str,
+    vigencia_autorizacion: str,
+) -> None:
+    """
+    Completa/actualiza en Autorizaciones_CA los datos de resolución y certificado
+    para una evaluación ya registrada.
+    """
+    df = leer_autorizaciones()
+    if df.empty:
+        return
+
+    mask = df["N° DE EVALUACION"].astype(str) == str(num_eval)
+    if not mask.any():
+        return
+
+    df.loc[mask, "CERTIFICADO ANTERIOR"] = certificado_anterior
+    df.loc[mask, "FECHA EMITIDA CERTIFICADO ANTERIOR"] = (
+        fecha_emitida_cert_anterior
+    )
+    df.loc[mask, "FECHA DE CADUCIDAD CERTIFICADO ANTERIOR"] = (
+        fecha_caducidad_cert_anterior
+    )
+    df.loc[mask, "N° DE RESOLUCIÓN"] = num_resolucion
+    df.loc[mask, "FECHA RESOLUCIÓN"] = fecha_resolucion
+    df.loc[mask, "N° DE CERTIFICADO"] = num_certificado
+    df.loc[mask, "FECHA EMITIDA CERTIFICADO"] = fecha_emitida_cert
+    df.loc[mask, "VIGENCIA DE AUTORIZACIÓN"] = vigencia_autorizacion
+
+    escribir_autorizaciones(df)
+
+
+def autorizaciones_pendientes_resolucion() -> pd.DataFrame:
+    """
+    Devuelve autorizaciones que todavía no tienen N° de Resolución.
+    """
+    df = leer_autorizaciones()
+    if df.empty:
+        return df
+
+    mask = df["N° DE RESOLUCIÓN"].astype(str).str.strip() == ""
+    return df[mask].copy()
+
+
+# ---------------------------------------------------------------------------
+# API – DOCUMENTOS SIMPLES
+# ---------------------------------------------------------------------------
+
+
+def leer_documentos() -> pd.DataFrame:
+    return _leer_df(DOCS_SHEET_NAME, COLUMNAS_DOCUMENTOS)
+
+
+def escribir_documentos(df: pd.DataFrame) -> None:
+    _escribir_df(DOCS_SHEET_NAME, COLUMNAS_DOCUMENTOS, df)
+
+
+def append_documento(
+    *,
+    fecha_ingreso: str,
+    num_documento_simple: str,
+    asunto: str,
+    nombre: str,
+    dni: str,
+    domicilio_fiscal: str,
+    giro_motivo: str,
+    ubicacion_solicitar: str,
+    celular: str,
+    procedencia: str,
+    num_carta: str = "",
+    fecha_carta: str = "",
+    fecha_notificacion: str = "",
+    folios: str = "",
+    estado: str = "PENDIENTE",
+) -> None:
+    """
+    Registra un nuevo Documento Simple en Documentos_CA.
+    """
+    fila = {
+        "ESTADO": estado,
+        "FECHA DE INGRESO": fecha_ingreso,
+        "N° DE DOCUMENTO SIMPLE": num_documento_simple,
+        "ASUNTO": asunto,
+        "NOMBRE Y APELLIDO": nombre,
+        "DNI": dni,
+        "DOMICILIO FISCAL": domicilio_fiscal,
+        "GIRO O MOTIVO DE LA SOLICITUD": giro_motivo,
+        "UBICACIÓN A SOLICITAR": ubicacion_solicitar,
+        "N° DE CELULAR": celular,
+        "PROCEDENTE / IMPROCEDENTE": procedencia,
+        "N° DE CARTA": num_carta,
+        "FECHA DE LA CARTA": fecha_carta,
+        "FECHA DE NOTIFICACION": fecha_notificacion,
+        "FOLIOS": folios,
+    }
+
+    _append_fila(
+        DOCS_SHEET_NAME,
+        COLUMNAS_DOCUMENTOS,
+        fila,
+        auto_numero_col="N°",
+    )
+
+
+def actualizar_estado_documento(num_documento_simple: str, nuevo_estado: str) -> None:
+    """
+    Cambia el ESTADO de un documento simple (por N° de Documento Simple).
+    """
+    df = leer_documentos()
+    if df.empty:
+        return
+
+    mask = (
+        df["N° DE DOCUMENTO SIMPLE"].astype(str).str.strip()
+        == str(num_documento_simple).strip()
+    )
+    if not mask.any():
+        return
+
+    df.loc[mask, "ESTADO"] = str(nuevo_estado).upper()
+    escribir_documentos(df)
+
+
+def documentos_para_evaluacion() -> pd.DataFrame:
+    """
+    Devuelve los Documentos Simples que se pueden usar para Evaluación:
+
+    - ASUNTO: RENOVACION o SOLICITUD DE COMERCIO AMBULATORIO
+    - PROCEDENTE / IMPROCEDENTE: PROCEDENTE
+    - ESTADO: PENDIENTE o EN EVALUACION
+    """
+    df = leer_documentos()
+    if df.empty:
+        return df
+
+    asuntos_validos = {"RENOVACION", "SOLICITUD DE COMERCIO AMBULATORIO"}
+
+    df["ASUNTO_UP"] = df["ASUNTO"].str.upper().str.strip()
+    df["PROC_UP"] = df["PROCEDENTE / IMPROCEDENTE"].str.upper().str.strip()
+    df["ESTADO_UP"] = df["ESTADO"].str.upper().str.strip()
+
+    mask = (
+        df["ASUNTO_UP"].isin(asuntos_validos)
+        & (df["PROC_UP"] == "PROCEDENTE")
+        & df["ESTADO_UP"].isin({"PENDIENTE", "EN EVALUACION"})
+    )
+
+    out = df[mask].copy()
+    out.drop(columns=["ASUNTO_UP", "PROC_UP", "ESTADO_UP"], inplace=True)
+    return out
