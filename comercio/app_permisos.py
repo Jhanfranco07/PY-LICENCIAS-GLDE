@@ -13,6 +13,11 @@ from integraciones.codart import (
     dni_a_nombre_completo,
 )
 
+# 🔗 Google Sheets (dos hojas: Evaluaciones y Autorizaciones)
+# Ajusta el import según dónde guardes sheets_comercio.py
+from sheets_comercio import append_evaluacion, append_autorizacion
+
+
 # ========= Utils locales =========
 def asegurar_dirs():
     os.makedirs("salidas", exist_ok=True)
@@ -406,6 +411,14 @@ def run_permisos_comercio():
         placeholder="Ej.: 16:00 A 21:00 HORAS",
     )
 
+    # 📞 Teléfono solo para BD (no va a las plantillas)
+    telefono = st.text_input(
+        "N° de teléfono (solo BD, no se imprime en plantillas)",
+        key="telefono",
+        value=st.session_state.get("telefono", ""),
+        placeholder="Ej.: 987654321",
+    )
+
     c3, c4 = st.columns(2)
     with c3:
         tiempo_num = st.number_input(
@@ -467,7 +480,8 @@ def run_permisos_comercio():
                 "plazo": plazo_unidad,
                 "rubro": rubro_num,
                 "codigo_rubro": codigo_rubro,
-                # raw dates para reutilizar en Resolución
+                "telefono": telefono.strip(),
+                # raw dates para reutilizar en Resolución / BD
                 "fecha_ingreso_raw": str(fecha_ingreso) if fecha_ingreso else "",
                 "fecha_evaluacion_raw": str(fecha_evaluacion)
                 if fecha_evaluacion
@@ -550,6 +564,23 @@ def run_permisos_comercio():
             if antiguo_certificado and not str(antiguo_certificado).isdigit():
                 st.error("El certificado anterior debe ser solo números (ej.: 121)")
 
+        # 🗓 Fechas del certificado anterior (solo BD)
+        c7 = st.columns(2)
+        with c7[0]:
+            fecha_cert_ant_emision = st.date_input(
+                "Fecha emitida cert. anterior (opcional)",
+                key="fecha_cert_ant_emision",
+                value=st.session_state.get("fecha_cert_ant_emision", None),
+                format="DD/MM/YYYY",
+            )
+        with c7[1]:
+            fecha_cert_ant_cad = st.date_input(
+                "Fecha caducidad cert. anterior (opcional)",
+                key="fecha_cert_ant_cad",
+                value=st.session_state.get("fecha_cert_ant_cad", None),
+                format="DD/MM/YYYY",
+            )
+
         genero, genero2, genero3, sr = genero_labels(eva.get("sexo", "Femenino"))
         st.markdown("**Datos importados desde Evaluación (solo lectura):**")
         st.write(
@@ -567,6 +598,7 @@ def run_permisos_comercio():
                 "Fecha de Evaluación": eva.get("fecha_evaluacion", ""),
                 "Tiempo": eva.get("tiempo", ""),
                 "Plazo": eva.get("plazo", ""),
+                "Teléfono": eva.get("telefono", ""),
                 "Género -> (genero, genero2, genero3, sr)": (
                     genero,
                     genero2,
@@ -598,6 +630,9 @@ def run_permisos_comercio():
             )
             eva["horario"] = st.text_input(
                 "Horario (override opcional)", value=eva.get("horario", "")
+            )
+            eva["telefono"] = st.text_input(
+                "Teléfono (override opcional)", value=eva.get("telefono", "")
             )
 
         def plantilla_por_tipo(t):
@@ -724,6 +759,106 @@ def run_permisos_comercio():
                     f"AU. {ctx_cert['codigo_certificado']}-{anio_cert}_{to_upper(eva.get('nombre',''))}",
                     TPL_CERT,
                 )
+
+    # ---------- Módulo 4: Guardar en BD (Google Sheets) ----------
+    st.markdown("---")
+    st.header("Guardar en Base de Datos (Google Sheets)")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+
+    if st.button("💾 Guardar Evaluación + Autorización en BD (Google Sheets)"):
+        eva = st.session_state.get("eval_ctx", {})
+        if not eva:
+            st.error("Primero genera la **Evaluación**.")
+        else:
+            cod_resolucion_val = st.session_state.get("cod_resolucion", "")
+            fecha_resolucion_val = st.session_state.get("fecha_resolucion", None)
+            cod_cert_val = st.session_state.get("cod_certificacion", "")
+            fecha_cert_val = st.session_state.get("fecha_certificado", None)
+            res_vig_ini_val = st.session_state.get("res_vig_ini", None)
+            res_vig_fin_val = st.session_state.get("res_vig_fin", None)
+            fecha_cert_ant_emision = st.session_state.get(
+                "fecha_cert_ant_emision", None
+            )
+            fecha_cert_ant_cad = st.session_state.get("fecha_cert_ant_cad", None)
+            antiguo_cert = st.session_state.get("antiguo_certificado", "")
+
+            falt_bd = []
+            if not cod_resolucion_val:
+                falt_bd.append("N° de resolución")
+            if not fecha_resolucion_val:
+                falt_bd.append("Fecha de resolución")
+            if not cod_cert_val:
+                falt_bd.append("N° de certificado")
+            if not fecha_cert_val:
+                falt_bd.append("Fecha del certificado")
+            if not res_vig_ini_val or not res_vig_fin_val:
+                falt_bd.append("Vigencia (inicio/fin) en Resolución")
+
+            if falt_bd:
+                st.error(
+                    "No se puede guardar en BD porque faltan campos obligatorios: "
+                    + ", ".join(falt_bd)
+                )
+            else:
+                try:
+                    # --- Hoja 1: Evaluaciones ---
+                    append_evaluacion(
+                        num_ds=eva.get("ds", ""),
+                        nombre_completo=eva.get("nombre", ""),
+                        cod_evaluacion=eva.get("cod_evaluacion", ""),
+                        # FECHA (usamos fecha de evaluación en formato corto)
+                        fecha_eval=fmt_fecha_corta(
+                            eva.get("fecha_evaluacion_raw", "")
+                        ),
+                        cod_resolucion=str(cod_resolucion_val),
+                        fecha_resolucion=fmt_fecha_corta(fecha_resolucion_val),
+                        num_autorizacion=str(cod_cert_val),
+                        fecha_autorizacion=fmt_fecha_corta(fecha_cert_val),
+                    )
+
+                    # --- Hoja 2: Autorizaciones ---
+                    vigencia_txt = build_vigencia(res_vig_ini_val, res_vig_fin_val)
+
+                    append_autorizacion(
+                        fecha_ingreso=fmt_fecha_corta(
+                            eva.get("fecha_ingreso_raw", "")
+                        ),
+                        ds=eva.get("ds", ""),
+                        nombre_completo=eva.get("nombre", ""),
+                        dni=eva.get("dni", ""),
+                        genero=eva.get("sexo", ""),
+                        domicilio_fiscal=eva.get("domicilio", ""),
+                        certificado_anterior=str(antiguo_cert or ""),
+                        fecha_emision_cert_ant=fmt_fecha_corta(
+                            fecha_cert_ant_emision
+                        ),
+                        fecha_caducidad_cert_ant=fmt_fecha_corta(
+                            fecha_cert_ant_cad
+                        ),
+                        cod_evaluacion=eva.get("cod_evaluacion", ""),
+                        fecha_evaluacion=fmt_fecha_corta(
+                            eva.get("fecha_evaluacion_raw", "")
+                        ),
+                        cod_resolucion=str(cod_resolucion_val),
+                        fecha_resolucion=fmt_fecha_corta(fecha_resolucion_val),
+                        cod_certificacion=str(cod_cert_val),
+                        fecha_emision_cert=fmt_fecha_corta(fecha_cert_val),
+                        vigencia_autorizacion=vigencia_txt,
+                        lugar_venta=eva.get("ubicacion", ""),
+                        referencia=eva.get("referencia", ""),
+                        giro=eva.get("giro", ""),
+                        horario=eva.get("horario", ""),
+                        telefono=eva.get("telefono", ""),
+                    )
+
+                    st.success(
+                        "Registros guardados en Google Sheets "
+                        "(hoja de Evaluaciones y hoja de Autorizaciones)."
+                    )
+                except Exception as e:
+                    st.error(f"No se pudo guardar en Google Sheets: {e}")
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # ---------- Ayuda ----------
     with st.expander("ℹ️ Llaves por plantilla (qué se llena)"):
