@@ -278,9 +278,7 @@ def _cb_autocomplete_dni():
 
         if nombre:
             st.session_state["nombre"] = nombre
-            st.session_state[
-                "dni_lookup_msg"
-            ] = "✅ DNI válido: nombre autocompletado."
+            st.session_state["dni_lookup_msg"] = "✅ DNI válido: nombre autocompletado."
         else:
             st.session_state["dni_lookup_msg"] = (
                 "⚠️ DNI OK, pero no se encontró nombre."
@@ -353,32 +351,33 @@ def run_permisos_comercio():
 
         if st.button("📥 Cargar datos del D.S. seleccionado"):
             fila = df_docs.iloc[int(idx_sel)]
-            st.session_state["ds"] = str(
-                fila.get("N° DE DOCUMENTO SIMPLE", "")
-            )
+            st.session_state["ds"] = str(fila.get("N° DE DOCUMENTO SIMPLE", ""))
             st.session_state["nombre"] = fila.get("NOMBRE Y APELLIDO", "")
             st.session_state["dni"] = str(fila.get("DNI", "")).strip()
-            st.session_state["domicilio"] = fila.get(
-                "DOMICILIO FISCAL", ""
-            )
-            st.session_state["ubicacion"] = fila.get(
-                "UBICACIÓN A SOLICITAR", ""
-            )
+            st.session_state["domicilio"] = fila.get("DOMICILIO FISCAL", "")
+            st.session_state["ubicacion"] = fila.get("UBICACIÓN A SOLICITAR", "")
             st.session_state["telefono"] = str(
                 fila.get("N° DE CELULAR", "")
             ).strip()
-            st.session_state["referencia"] = fila.get(
-                "GIRO O MOTIVO DE LA SOLICITUD", ""
-            )
+
+            # 👇 AQUÍ SE CORRIGE EL TEMA DEL GIRO
+            giro_val = fila.get("GIRO O MOTIVO DE LA SOLICITUD", "")
+
+            if giro_val in GIROS_OPCIONES:
+                # Usar giro del DS como selección inicial del selectbox
+                st.session_state["giro_label"] = giro_val
+                # Referencia vacía (no viene del DS)
+                st.session_state["referencia"] = ""
+            else:
+                # Si no coincide con la lista oficial, lo mandamos como referencia
+                st.session_state["referencia"] = giro_val
 
             # Fechas
             st.session_state["fecha_ingreso"] = _parse_fecha_ddmmaaaa(
                 fila.get("FECHA DE INGRESO", "")
             )
 
-            st.success(
-                "Datos del Documento Simple cargados en el formulario."
-            )
+            st.success("Datos del Documento Simple cargados en el formulario.")
 
     st.markdown("---")
 
@@ -786,9 +785,7 @@ def run_permisos_comercio():
             ):
                 st.error("DNI inválido (8 dígitos)")
             elif not eva.get("horario"):
-                st.error(
-                    "Falta **Horario** en Evaluación (o en Ediciones rápidas)."
-                )
+                st.error("Falta **Horario** en Evaluación (o en Ediciones rápidas).")
             elif falt:
                 st.error("Faltan campos de Resolución: " + ", ".join(falt))
             else:
@@ -799,16 +796,13 @@ def run_permisos_comercio():
                     "cod_resolucion": str(cod_resolucion).strip(),
                     "fecha_resolucion": fmt_fecha_larga(fecha_resolucion),
                     "ds": str(eva.get("ds", "")).strip(),
-                    "fecha_ingreso": fmt_fecha_corta(
-                        eva.get("fecha_ingreso_raw")
-                    ),
+                    "fecha_ingreso": fmt_fecha_corta(eva.get("fecha_ingreso_raw")),
                     "genero": genero,
                     "genero2": genero2,
                     "genero3": genero3,
                     "nombre": to_upper(eva.get("nombre", "")),
                     "dni": str(eva.get("dni", "")).strip(),
-                    "domicilio": to_upper(eva.get("domicilio", ""))
-                    + "-PACHACAMAC",
+                    "domicilio": to_upper(eva.get("domicilio", "")) + "-PACHACAMAC",
                     "giro": str(eva.get("giro", "")).strip(),
                     "rubro": str(eva.get("rubro", "")).strip(),
                     "codigo_rubro": str(eva.get("codigo_rubro", "")).strip(),
@@ -930,9 +924,7 @@ def run_permisos_comercio():
                     fecha_emitida_cert_anterior="",
                     fecha_caducidad_cert_anterior="",
                     num_eval=eva.get("cod_evaluacion", ""),
-                    fecha_eval=fmt_fecha_corta(
-                        eva.get("fecha_evaluacion_raw", "")
-                    ),
+                    fecha_eval=fmt_fecha_corta(eva.get("fecha_evaluacion_raw", "")),
                     num_resolucion="",
                     fecha_resolucion="",
                     num_certificado="",
@@ -949,9 +941,7 @@ def run_permisos_comercio():
 
                 # Actualiza estado del DS (si aplica)
                 if eva.get("ds"):
-                    actualizar_estado_documento(
-                        eva.get("ds", ""), "EN EVALUACION"
-                    )
+                    actualizar_estado_documento(eva.get("ds", ""), "EN EVALUACION")
 
                 st.success(
                     "Evaluación guardada en Google Sheets "
@@ -1013,9 +1003,7 @@ def run_permisos_comercio():
                     )
 
                     # Texto de vigencia
-                    vigencia_txt = build_vigencia(
-                        res_vig_ini_val, res_vig_fin_val
-                    )
+                    vigencia_txt = build_vigencia(res_vig_ini_val, res_vig_fin_val)
 
                     # Completa la fila ya creada en Autorizaciones_CA
                     actualizar_autorizacion_resolucion_y_cert(
@@ -1036,9 +1024,7 @@ def run_permisos_comercio():
 
                     # Cambia estado del DS a AUTORIZADO
                     if eva.get("ds"):
-                        actualizar_estado_documento(
-                            eva.get("ds", ""), "AUTORIZADO"
-                        )
+                        actualizar_estado_documento(eva.get("ds", ""), "AUTORIZADO")
 
                     st.success(
                         "Resolución y Certificado guardados en Google Sheets."
