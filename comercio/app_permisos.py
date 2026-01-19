@@ -15,7 +15,7 @@ from integraciones.codart import (
 
 # 🔗 Google Sheets (dos hojas: Evaluaciones y Autorizaciones)
 # Ajusta el import según dónde guardes sheets_comercio.py
-from sheets_comercio import append_evaluacion, append_autorizacion
+from comercio.sheets_comercio import append_evaluacion, append_autorizacion
 
 
 # ========= Utils locales =========
