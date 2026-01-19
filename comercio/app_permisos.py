@@ -2,7 +2,7 @@
 
 import io
 import os
-
+import traceback  # 👈 para ver tracebacks
 import pandas as pd
 import streamlit as st
 from docxtpl import DocxTemplate
@@ -14,7 +14,6 @@ from integraciones.codart import (
 )
 
 # 🔗 Google Sheets (dos hojas: Evaluaciones y Autorizaciones)
-# Ajusta el import según dónde guardes sheets_comercio.py
 from comercio.sheets_comercio import append_evaluacion, append_autorizacion
 
 
@@ -856,7 +855,11 @@ def run_permisos_comercio():
                         "(hoja de Evaluaciones y hoja de Autorizaciones)."
                     )
                 except Exception as e:
+                    # 👇 DEBUG: mostramos traceback completo en Streamlit y consola
+                    tb = traceback.format_exc()
                     st.error(f"No se pudo guardar en Google Sheets: {e}")
+                    st.code(tb, language="python")
+                    print("ERROR GUARDANDO EN SHEETS_COMERCIO:\n", tb)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
