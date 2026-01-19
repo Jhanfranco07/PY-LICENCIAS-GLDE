@@ -12,6 +12,8 @@ from comercio.sheets_comercio import (
     append_documento,
     leer_documentos,
 )
+# 👇 Usamos las opciones de giro tal como en Evaluación
+from comercio.app_permisos import GIROS_OPCIONES
 
 
 def _fmt_fecha_corta(d) -> str:
@@ -77,21 +79,30 @@ def run_documentos_comercio():
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("Nuevo Documento Simple")
 
+    # ------------------------------------------------------------------
     # Tipo de solicitud / Asunto
+    # ------------------------------------------------------------------
     tipo_asunto = st.selectbox(
-        "Tipo de solicitud",
+        "Tipo de solicitud*",
         [
             "RENOVACION",
             "SOLICITUD DE COMERCIO AMBULATORIO",
             "OTROS (especificar)",
         ],
+        key="tipo_asunto_ds",
     )
 
     asunto_otro = ""
     if tipo_asunto == "OTROS (especificar)":
-        asunto_otro = st.text_input("Asunto (texto libre)*", key="asunto_otro")
+        asunto_otro = st.text_input(
+            "Asunto (texto libre)*",
+            key="asunto_otro",
+            placeholder="Ej.: Solicitud de constancia, queja, etc.",
+        )
 
+    # ------------------------------------------------------------------
     # Datos básicos
+    # ------------------------------------------------------------------
     c1, c2 = st.columns(2)
     with c1:
         fecha_ingreso = st.date_input(
@@ -133,11 +144,23 @@ def run_documentos_comercio():
 
     domicilio = st.text_input("Domicilio fiscal*", key="domicilio_ds")
 
-    giro_motivo = st.text_input(
-        "Giro o motivo de la solicitud*",
-        key="giro_motivo_ds",
-        placeholder="Ej.: Renovación de permiso de venta de golosinas",
-    )
+    # ------------------------------------------------------------------
+    # Giro / motivo de la solicitud (condicional)
+    # ------------------------------------------------------------------
+    if tipo_asunto in ("RENOVACION", "SOLICITUD DE COMERCIO AMBULATORIO"):
+        giro_label = st.selectbox(
+            "Giro (según Ordenanza)*",
+            GIROS_OPCIONES,
+            key="giro_motivo_ds_select",
+        )
+        # Lo que se guarda en la hoja: GIRO O MOTIVO DE LA SOLICITUD
+        giro_motivo = giro_label
+    else:
+        giro_motivo = st.text_input(
+            "Giro o motivo de la solicitud*",
+            key="giro_motivo_ds",
+            placeholder="Describe el motivo de la solicitud",
+        )
 
     ubicacion = st.text_input(
         "Ubicación a solicitar*",
@@ -183,6 +206,7 @@ def run_documentos_comercio():
     if st.button("💾 Registrar Documento Simple"):
         falt = []
 
+        # Asunto que se guarda en la columna ASUNTO
         asunto_final = (
             asunto_otro.strip()
             if tipo_asunto == "OTROS (especificar)"
@@ -201,6 +225,8 @@ def run_documentos_comercio():
             falt.append("dni")
         if not domicilio.strip():
             falt.append("domicilio")
+        if not giro_motivo.strip():
+            falt.append("giro_motivo")
         if not ubicacion.strip():
             falt.append("ubicacion")
 
