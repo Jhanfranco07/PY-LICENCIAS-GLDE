@@ -20,8 +20,6 @@ from comercio.sheets_comercio import (
     documentos_para_evaluacion,
     actualizar_estado_documento,
     autorizaciones_pendientes_resolucion,
-    actualizar_evaluacion_con_resolucion,
-    actualizar_autorizacion_resolucion_y_cert,
 )
 
 # ========= Utils locales =========
@@ -278,7 +276,9 @@ def _cb_autocomplete_dni():
 
         if nombre:
             st.session_state["nombre"] = nombre
-            st.session_state["dni_lookup_msg"] = "✅ DNI válido: nombre autocompletado."
+            st.session_state[
+                "dni_lookup_msg"
+            ] = "✅ DNI válido: nombre autocompletado."
         else:
             st.session_state["dni_lookup_msg"] = (
                 "⚠️ DNI OK, pero no se encontró nombre."
@@ -351,33 +351,32 @@ def run_permisos_comercio():
 
         if st.button("📥 Cargar datos del D.S. seleccionado"):
             fila = df_docs.iloc[int(idx_sel)]
-            st.session_state["ds"] = str(fila.get("N° DE DOCUMENTO SIMPLE", ""))
+            st.session_state["ds"] = str(
+                fila.get("N° DE DOCUMENTO SIMPLE", "")
+            )
             st.session_state["nombre"] = fila.get("NOMBRE Y APELLIDO", "")
             st.session_state["dni"] = str(fila.get("DNI", "")).strip()
-            st.session_state["domicilio"] = fila.get("DOMICILIO FISCAL", "")
-            st.session_state["ubicacion"] = fila.get("UBICACIÓN A SOLICITAR", "")
+            st.session_state["domicilio"] = fila.get(
+                "DOMICILIO FISCAL", ""
+            )
+            st.session_state["ubicacion"] = fila.get(
+                "UBICACIÓN A SOLICITAR", ""
+            )
             st.session_state["telefono"] = str(
                 fila.get("N° DE CELULAR", "")
             ).strip()
-
-            # 👇 AQUÍ SE CORRIGE EL TEMA DEL GIRO
-            giro_val = fila.get("GIRO O MOTIVO DE LA SOLICITUD", "")
-
-            if giro_val in GIROS_OPCIONES:
-                # Usar giro del DS como selección inicial del selectbox
-                st.session_state["giro_label"] = giro_val
-                # Referencia vacía (no viene del DS)
-                st.session_state["referencia"] = ""
-            else:
-                # Si no coincide con la lista oficial, lo mandamos como referencia
-                st.session_state["referencia"] = giro_val
+            st.session_state["referencia"] = fila.get(
+                "GIRO O MOTIVO DE LA SOLICITUD", ""
+            )
 
             # Fechas
             st.session_state["fecha_ingreso"] = _parse_fecha_ddmmaaaa(
                 fila.get("FECHA DE INGRESO", "")
             )
 
-            st.success("Datos del Documento Simple cargados en el formulario.")
+            st.success(
+                "Datos del Documento Simple cargados en el formulario."
+            )
 
     st.markdown("---")
 
@@ -785,7 +784,9 @@ def run_permisos_comercio():
             ):
                 st.error("DNI inválido (8 dígitos)")
             elif not eva.get("horario"):
-                st.error("Falta **Horario** en Evaluación (o en Ediciones rápidas).")
+                st.error(
+                    "Falta **Horario** en Evaluación (o en Ediciones rápidas)."
+                )
             elif falt:
                 st.error("Faltan campos de Resolución: " + ", ".join(falt))
             else:
@@ -796,13 +797,16 @@ def run_permisos_comercio():
                     "cod_resolucion": str(cod_resolucion).strip(),
                     "fecha_resolucion": fmt_fecha_larga(fecha_resolucion),
                     "ds": str(eva.get("ds", "")).strip(),
-                    "fecha_ingreso": fmt_fecha_corta(eva.get("fecha_ingreso_raw")),
+                    "fecha_ingreso": fmt_fecha_corta(
+                        eva.get("fecha_ingreso_raw")
+                    ),
                     "genero": genero,
                     "genero2": genero2,
                     "genero3": genero3,
                     "nombre": to_upper(eva.get("nombre", "")),
                     "dni": str(eva.get("dni", "")).strip(),
-                    "domicilio": to_upper(eva.get("domicilio", "")) + "-PACHACAMAC",
+                    "domicilio": to_upper(eva.get("domicilio", ""))
+                    + "-PACHACAMAC",
                     "giro": str(eva.get("giro", "")).strip(),
                     "rubro": str(eva.get("rubro", "")).strip(),
                     "codigo_rubro": str(eva.get("codigo_rubro", "")).strip(),
@@ -890,77 +894,15 @@ def run_permisos_comercio():
     st.header("Módulo 4 · Base de Datos (Google Sheets)")
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    eva = st.session_state.get("eval_ctx", {})
+    st.subheader("Guardar Evaluación + Resolución + Certificado")
 
-    # 4.1 Guardar SOLO Evaluación
-    st.subheader("4.1 Guardar SOLO Evaluación")
-
-    if st.button("💾 Guardar Evaluación en BD"):
-        if not eva:
-            st.error("Primero genera la **Evaluación**.")
-        else:
-            try:
-                # Hoja 1: Evaluaciones_CA (solo datos de evaluación)
-                append_evaluacion(
-                    num_ds=eva.get("ds", ""),
-                    nombre_completo=eva.get("nombre", ""),
-                    cod_evaluacion=eva.get("cod_evaluacion", ""),
-                    fecha_eval=fmt_fecha_corta(eva.get("fecha_evaluacion_raw", "")),
-                    cod_resolucion="",
-                    fecha_resolucion="",
-                    num_autorizacion="",
-                    fecha_autorizacion="",
-                )
-
-                # Hoja 2: Autorizaciones_CA (datos de evaluación, sin resolución aún)
-                append_autorizacion(
-                    fecha_ingreso=fmt_fecha_corta(eva.get("fecha_ingreso_raw", "")),
-                    ds=eva.get("ds", ""),
-                    nombre=eva.get("nombre", ""),
-                    dni=eva.get("dni", ""),
-                    genero=eva.get("sexo", ""),
-                    domicilio_fiscal=eva.get("domicilio", ""),
-                    certificado_anterior="",
-                    fecha_emitida_cert_anterior="",
-                    fecha_caducidad_cert_anterior="",
-                    num_eval=eva.get("cod_evaluacion", ""),
-                    fecha_eval=fmt_fecha_corta(eva.get("fecha_evaluacion_raw", "")),
-                    num_resolucion="",
-                    fecha_resolucion="",
-                    num_certificado="",
-                    fecha_emitida_cert="",
-                    vigencia_autorizacion="",
-                    lugar_venta=eva.get("ubicacion", ""),
-                    referencia=eva.get("referencia", ""),
-                    giro=eva.get("giro", ""),
-                    horario=eva.get("horario", ""),
-                    telefono=eva.get("telefono", ""),
-                    tiempo=str(eva.get("tiempo", "")),
-                    plazo=str(eva.get("plazo", "")),
-                )
-
-                # Actualiza estado del DS (si aplica)
-                if eva.get("ds"):
-                    actualizar_estado_documento(eva.get("ds", ""), "EN EVALUACION")
-
-                st.success(
-                    "Evaluación guardada en Google Sheets "
-                    "(Evaluaciones_CA y Autorizaciones_CA)."
-                )
-            except Exception as e:
-                tb = traceback.format_exc()
-                st.error(f"No se pudo guardar la Evaluación en BD: {e}")
-                st.code(tb, language="python")
-
-    st.markdown("---")
-
-    # 4.2 Guardar Resolución + Certificado
-    st.subheader("4.2 Guardar Resolución + Certificado")
-
-    if st.button("💾 Guardar Resolución + Certificado en BD"):
+    if st.button("💾 Guardar TODO en BD (Google Sheets)"):
         eva = st.session_state.get("eval_ctx", {})
         if not eva:
-            st.error("Primero genera/carga la **Evaluación**.")
+            st.error(
+                "Primero genera la **Evaluación**, la **Resolución** "
+                "y el **Certificado** (fechas/vigencias)."
+            )
         else:
             cod_resolucion_val = st.session_state.get("cod_resolucion", "")
             fecha_resolucion_val = st.session_state.get("fecha_resolucion", None)
@@ -993,21 +935,37 @@ def run_permisos_comercio():
                 )
             else:
                 try:
-                    # Actualiza Evaluaciones_CA con info de resolución/autorización
-                    actualizar_evaluacion_con_resolucion(
+                    # Texto de vigencia
+                    vigencia_txt = build_vigencia(
+                        res_vig_ini_val, res_vig_fin_val
+                    )
+
+                    # --- Hoja Evaluaciones_CA (todo completo) ---
+                    append_evaluacion(
+                        num_ds=eva.get("ds", ""),
+                        nombre_completo=eva.get("nombre", ""),
                         cod_evaluacion=eva.get("cod_evaluacion", ""),
+                        fecha_eval=fmt_fecha_corta(
+                            eva.get("fecha_evaluacion_raw", "")
+                        ),
                         cod_resolucion=str(cod_resolucion_val),
-                        fecha_resolucion=fmt_fecha_corta(fecha_resolucion_val),
+                        fecha_resolucion=fmt_fecha_corta(
+                            fecha_resolucion_val
+                        ),
                         num_autorizacion=str(cod_cert_val),
                         fecha_autorizacion=fmt_fecha_corta(fecha_cert_val),
                     )
 
-                    # Texto de vigencia
-                    vigencia_txt = build_vigencia(res_vig_ini_val, res_vig_fin_val)
-
-                    # Completa la fila ya creada en Autorizaciones_CA
-                    actualizar_autorizacion_resolucion_y_cert(
-                        num_eval=eva.get("cod_evaluacion", ""),
+                    # --- Hoja Autorizaciones_CA (todo completo) ---
+                    append_autorizacion(
+                        fecha_ingreso=fmt_fecha_corta(
+                            eva.get("fecha_ingreso_raw", "")
+                        ),
+                        ds=eva.get("ds", ""),
+                        nombre=eva.get("nombre", ""),
+                        dni=eva.get("dni", ""),
+                        genero=eva.get("sexo", ""),
+                        domicilio_fiscal=eva.get("domicilio", ""),
                         certificado_anterior=str(antiguo_cert or ""),
                         fecha_emitida_cert_anterior=fmt_fecha_corta(
                             fecha_cert_ant_emision
@@ -1015,25 +973,38 @@ def run_permisos_comercio():
                         fecha_caducidad_cert_anterior=fmt_fecha_corta(
                             fecha_cert_ant_cad
                         ),
+                        num_eval=eva.get("cod_evaluacion", ""),
+                        fecha_eval=fmt_fecha_corta(
+                            eva.get("fecha_evaluacion_raw", "")
+                        ),
                         num_resolucion=str(cod_resolucion_val),
-                        fecha_resolucion=fmt_fecha_corta(fecha_resolucion_val),
+                        fecha_resolucion=fmt_fecha_corta(
+                            fecha_resolucion_val
+                        ),
                         num_certificado=str(cod_cert_val),
                         fecha_emitida_cert=fmt_fecha_corta(fecha_cert_val),
                         vigencia_autorizacion=vigencia_txt,
+                        lugar_venta=eva.get("ubicacion", ""),
+                        referencia=eva.get("referencia", ""),
+                        giro=eva.get("giro", ""),
+                        horario=eva.get("horario", ""),
+                        telefono=eva.get("telefono", ""),
+                        tiempo=str(eva.get("tiempo", "")),
+                        plazo=str(eva.get("plazo", "")),
                     )
 
                     # Cambia estado del DS a AUTORIZADO
                     if eva.get("ds"):
-                        actualizar_estado_documento(eva.get("ds", ""), "AUTORIZADO")
+                        actualizar_estado_documento(
+                            eva.get("ds", ""), "AUTORIZADO"
+                        )
 
                     st.success(
-                        "Resolución y Certificado guardados en Google Sheets."
+                        "Evaluación, Resolución y Certificado guardados en Google Sheets."
                     )
                 except Exception as e:
                     tb = traceback.format_exc()
-                    st.error(
-                        f"No se pudo guardar Resolución + Certificado en BD: {e}"
-                    )
+                    st.error(f"No se pudo guardar todo en BD: {e}")
                     st.code(tb, language="python")
 
     st.markdown("</div>", unsafe_allow_html=True)
