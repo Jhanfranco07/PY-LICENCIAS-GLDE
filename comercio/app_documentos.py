@@ -12,31 +12,16 @@ from comercio.sheets_comercio import (
     append_documento,
     leer_documentos,
 )
-# 👇 Usamos las opciones de giro tal como en Evaluación
-from comercio.app_permisos import GIROS_OPCIONES
+# Reutilizamos las opciones de giros y el helper to_upper
+from comercio.app_permisos import GIROS_OPCIONES, to_upper
 
 
 def _fmt_fecha_corta(d) -> str:
+    """Devuelve la fecha en formato DD/MM/YYYY."""
     try:
         return pd.to_datetime(d).strftime("%d/%m/%Y")
     except Exception:
         return ""
-
-
-# ===== Helper: text_input que deja el valor en MAYÚSCULAS =====
-def text_input_upper(label: str, *, key: str, **kwargs) -> str:
-    """
-    Envuelve st.text_input para que el valor quede en MAYÚSCULA.
-    Usa un callback on_change (forma segura para Streamlit).
-    """
-    def _upper_cb():
-        v = st.session_state.get(key, "")
-        st.session_state[key] = (v or "").upper()
-
-    # Si alguien pasó on_change, lo ignoramos para evitar conflictos
-    kwargs.pop("on_change", None)
-
-    return st.text_input(label, key=key, on_change=_upper_cb, **kwargs)
 
 
 # ===== Autocomplete DNI solo para este módulo DS =====
@@ -56,9 +41,10 @@ def _cb_autocomplete_dni_ds():
         nombre = dni_a_nombre_completo(res)
 
         if nombre:
-            # Aquí puedes forzar a mayúsculas si quieres:
-            st.session_state["nombre_ds"] = (nombre or "").upper()
-            st.session_state["dni_ds_msg"] = "✅ DNI válido: nombre autocompletado."
+            st.session_state["nombre_ds"] = nombre
+            st.session_state[
+                "dni_ds_msg"
+            ] = "✅ DNI válido: nombre autocompletado."
         else:
             st.session_state["dni_ds_msg"] = (
                 "⚠️ DNI OK, pero no se encontró nombre."
@@ -74,12 +60,17 @@ def _cb_autocomplete_dni_ds():
 def run_documentos_comercio():
     _init_dni_state_ds()
 
+    # --- Estilos (todo en mayúsculas visualmente) ---
     st.markdown(
         """
     <style>
     .block-container { padding-top: 1.0rem; max-width: 980px; }
     .card { border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px; margin-bottom: 12px; background: #0f172a08; }
     .stButton>button { border-radius: 10px; padding: .55rem 1rem; font-weight: 600; }
+    /* solo apariencia, el valor real lo limpiamos en Python */
+    input[type="text"], textarea {
+        text-transform: uppercase;
+    }
     </style>
     """,
         unsafe_allow_html=True,
@@ -109,7 +100,7 @@ def run_documentos_comercio():
 
     asunto_otro = ""
     if tipo_asunto == "OTROS (especificar)":
-        asunto_otro = text_input_upper(
+        asunto_otro = st.text_input(
             "Asunto (texto libre)*",
             key="asunto_otro",
             placeholder="Ej.: Solicitud de constancia, queja, etc.",
@@ -144,7 +135,6 @@ def run_documentos_comercio():
             on_change=_cb_autocomplete_dni_ds,
         )
     with c4:
-        # Aquí dejamos text_input normal porque el nombre viene del API
         nombre = st.text_input(
             "Nombre y apellido*",
             key="nombre_ds",
@@ -158,8 +148,7 @@ def run_documentos_comercio():
         else:
             st.warning(msg_dni)
 
-    # Domicilio siempre en mayúscula
-    domicilio = text_input_upper("Domicilio fiscal*", key="domicilio_ds")
+    domicilio = st.text_input("Domicilio fiscal*", key="domicilio_ds")
 
     # ------------------------------------------------------------------
     # Giro / motivo de la solicitud (condicional)
@@ -170,16 +159,16 @@ def run_documentos_comercio():
             GIROS_OPCIONES,
             key="giro_motivo_ds_select",
         )
-        giro_motivo = giro_label  # se guarda tal cual la opción
+        # Lo que se guarda en la hoja: GIRO O MOTIVO DE LA SOLICITUD
+        giro_motivo = giro_label
     else:
-        giro_motivo = text_input_upper(
+        giro_motivo = st.text_input(
             "Giro o motivo de la solicitud*",
             key="giro_motivo_ds",
             placeholder="Describe el motivo de la solicitud",
         )
 
-    # Ubicación también en mayúscula
-    ubicacion = text_input_upper(
+    ubicacion = st.text_input(
         "Ubicación a solicitar*",
         key="ubicacion_ds",
         placeholder="Av./Jr./Parque ...",
@@ -256,22 +245,22 @@ def run_documentos_comercio():
                 append_documento(
                     fecha_ingreso=_fmt_fecha_corta(fecha_ingreso),
                     num_documento_simple=num_ds.strip(),
-                    asunto=asunto_final.strip().upper(),
-                    nombre=nombre.strip().upper(),
+                    asunto=to_upper(asunto_final),
+                    nombre=to_upper(nombre),
                     dni=dni.strip(),
-                    domicilio_fiscal=domicilio.strip().upper(),
-                    giro_motivo=giro_motivo.strip().upper(),
-                    ubicacion_solicitar=ubicacion.strip().upper(),
+                    domicilio_fiscal=to_upper(domicilio),
+                    giro_motivo=to_upper(giro_motivo),
+                    ubicacion_solicitar=to_upper(ubicacion),
                     celular=celular.strip(),
-                    procedencia=procedencia.strip(),
-                    num_carta=num_carta.strip(),
+                    procedencia=to_upper(procedencia),
+                    num_carta=to_upper(num_carta),
                     fecha_carta=_fmt_fecha_corta(fecha_carta)
                     if fecha_carta
                     else "",
                     fecha_notificacion=_fmt_fecha_corta(fecha_notif)
                     if fecha_notif
                     else "",
-                    folios=folios.strip(),
+                    folios=to_upper(folios),
                     estado="PENDIENTE",
                 )
                 st.success("Documento Simple registrado correctamente.")
