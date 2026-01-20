@@ -39,6 +39,18 @@ def to_upper(s: str) -> str:
     return (s or "").strip().upper()
 
 
+def text_input_upper(label: str, key: str, **kwargs) -> str:
+    """
+    Wrapper de text_input que guarda y devuelve SIEMPRE en mayúsculas.
+    Úsalo solo para campos de texto, no para DNI o teléfonos.
+    """
+    v = st.text_input(label, key=key, **kwargs)
+    v_up = to_upper(v)
+    if v != v_up:
+        st.session_state[key] = v_up
+    return v_up
+
+
 def fmt_fecha_corta(d) -> str:
     try:
         return pd.to_datetime(d).strftime("%d/%m/%Y")
@@ -276,7 +288,7 @@ def _cb_autocomplete_dni():
         nombre = dni_a_nombre_completo(res)
 
         if nombre:
-            st.session_state["nombre"] = nombre
+            st.session_state["nombre"] = to_upper(nombre)
             st.session_state[
                 "dni_lookup_msg"
             ] = "✅ DNI válido: nombre autocompletado."
@@ -355,19 +367,21 @@ def run_permisos_comercio():
             st.session_state["ds"] = str(
                 fila.get("N° DE DOCUMENTO SIMPLE", "")
             )
-            st.session_state["nombre"] = fila.get("NOMBRE Y APELLIDO", "")
-            st.session_state["dni"] = str(fila.get("DNI", "")).strip()
-            st.session_state["domicilio"] = fila.get(
-                "DOMICILIO FISCAL", ""
+            st.session_state["nombre"] = to_upper(
+                fila.get("NOMBRE Y APELLIDO", "")
             )
-            st.session_state["ubicacion"] = fila.get(
-                "UBICACIÓN A SOLICITAR", ""
+            st.session_state["dni"] = str(fila.get("DNI", "")).strip()
+            st.session_state["domicilio"] = to_upper(
+                fila.get("DOMICILIO FISCAL", "")
+            )
+            st.session_state["ubicacion"] = to_upper(
+                fila.get("UBICACIÓN A SOLICITAR", "")
             )
             st.session_state["telefono"] = str(
                 fila.get("N° DE CELULAR", "")
             ).strip()
-            st.session_state["referencia"] = fila.get(
-                "GIRO O MOTIVO DE LA SOLICITUD", ""
+            st.session_state["referencia"] = to_upper(
+                fila.get("GIRO O MOTIVO DE LA SOLICITUD", "")
             )
 
             st.session_state["fecha_ingreso"] = _parse_fecha_ddmmaaaa(
@@ -398,7 +412,7 @@ def run_permisos_comercio():
         else:
             st.warning(msg_dni)
 
-    nombre = st.text_input(
+    nombre = text_input_upper(
         "Solicitante (Nombre completo)*",
         key="nombre",
         value=st.session_state.get("nombre", ""),
@@ -411,7 +425,7 @@ def run_permisos_comercio():
         index=0 if st.session_state.get("sexo", "Femenino") == "Femenino" else 1,
     )
 
-    cod_evaluacion = st.text_input(
+    cod_evaluacion = text_input_upper(
         "Código de evaluación*",
         key="cod_evaluacion",
         value=st.session_state.get("cod_evaluacion", ""),
@@ -421,13 +435,13 @@ def run_permisos_comercio():
     if dni and (not dni.isdigit() or len(dni) != 8):
         st.error("⚠️ DNI debe tener exactamente 8 dígitos numéricos")
 
-    ds = st.text_input(
+    ds = text_input_upper(
         "Documento Simple (DS)",
         key="ds",
         value=st.session_state.get("ds", ""),
         placeholder="Ej.: 123 (opcional)",
     )
-    domicilio = st.text_input(
+    domicilio = text_input_upper(
         "Domicilio fiscal*",
         key="domicilio",
         value=st.session_state.get("domicilio", ""),
@@ -462,18 +476,18 @@ def run_permisos_comercio():
 
     st.caption(f"Se usará el rubro {rubro_num} con el código {codigo_rubro}.")
 
-    ubicacion = st.text_input(
+    ubicacion = text_input_upper(
         "Ubicación*",
         key="ubicacion",
         value=st.session_state.get("ubicacion", ""),
         placeholder="Av./Jr./Parque..., sin 'Distrito de Pachacámac'",
     )
-    referencia = st.text_input(
+    referencia = text_input_upper(
         "Referencia (opcional)",
         key="referencia",
         value=st.session_state.get("referencia", ""),
     )
-    horario_eval = st.text_input(
+    horario_eval = text_input_upper(
         "Horario (opcional)",
         key="horario",
         value=st.session_state.get("horario", ""),
@@ -538,7 +552,8 @@ def run_permisos_comercio():
                 "dni": dni.strip(),
                 "ds": (ds or "").strip(),
                 "domicilio": to_upper(domicilio),
-                "fecha_ingreso": fmt_fecha_corta(fecha_ingreso),
+                # ⬇️ ahora fecha de ingreso en largo: 16 de ENERO de 2026
+                "fecha_ingreso": fmt_fecha_larga_de(fecha_ingreso),
                 "fecha_evaluacion": fmt_fecha_larga(fecha_evaluacion),
                 "giro": giro_texto,
                 "ubicacion": ubicacion.strip(),
@@ -582,7 +597,7 @@ def run_permisos_comercio():
         )
         c0 = st.columns(2)
         with c0[0]:
-            cod_resolucion = st.text_input(
+            cod_resolucion = text_input_upper(
                 "N° de resolución*",
                 key="cod_resolucion",
                 value=st.session_state.get("cod_resolucion", ""),
@@ -615,14 +630,14 @@ def run_permisos_comercio():
 
         c6 = st.columns(2)
         with c6[0]:
-            cod_certificacion = st.text_input(
+            cod_certificacion = text_input_upper(
                 "N° de Certificado*",
                 key="cod_certificacion",
                 value=st.session_state.get("cod_certificacion", ""),
                 placeholder="Ej: 789",
             )
         with c6[1]:
-            antiguo_certificado = st.text_input(
+            antiguo_certificado = text_input_upper(
                 "N° de Certificado anterior (opcional)",
                 key="antiguo_certificado",
                 value=st.session_state.get("antiguo_certificado", ""),
@@ -676,7 +691,9 @@ def run_permisos_comercio():
 
         with st.expander("✏️ Ediciones rápidas (opcional)"):
             st.info("Por defecto NO necesitas tocar nada aquí.")
-            eva["ds"] = st.text_input("DS (override opcional)", value=eva.get("ds", ""))
+            eva["ds"] = text_input_upper(
+                "DS (override opcional)", key="eva_ds_override", value=eva.get("ds", "")
+            )
             eva["nombre"] = to_upper(
                 st.text_input(
                     "Nombre (override opcional)", value=eva.get("nombre", "")
@@ -692,19 +709,25 @@ def run_permisos_comercio():
                     "Domicilio (override opcional)", value=eva.get("domicilio", "")
                 )
             )
-            eva["ubicacion"] = st.text_input(
-                "Ubicación (override opcional)", value=eva.get("ubicacion", "")
+            eva["ubicacion"] = to_upper(
+                st.text_input(
+                    "Ubicación (override opcional)", value=eva.get("ubicacion", "")
+                )
             )
-            eva["giro"] = st.text_input(
-                "Giro (override opcional)", value=eva.get("giro", "")
+            eva["giro"] = to_upper(
+                st.text_input(
+                    "Giro (override opcional)", value=eva.get("giro", "")
+                )
             )
-            eva["horario"] = st.text_input(
-                "Horario (override opcional)", value=eva.get("horario", "")
+            eva["horario"] = to_upper(
+                st.text_input(
+                    "Horario (override opcional)", value=eva.get("horario", "")
+                )
             )
             eva["telefono"] = st.text_input(
                 "Teléfono (override opcional)", value=eva.get("telefono", "")
             )
-            st.session_state["eval_ctx"] = eva
+            st.session_state["eval_ctx"] = eva  # guarda cambios
 
         def plantilla_por_tipo(t):
             return (
@@ -743,7 +766,8 @@ def run_permisos_comercio():
                     "cod_resolucion": str(cod_resolucion).strip(),
                     "fecha_resolucion": fmt_fecha_larga(fecha_resolucion),
                     "ds": str(eva.get("ds", "")).strip(),
-                    "fecha_ingreso": fmt_fecha_corta(
+                    # ⬇️ ahora también en largo
+                    "fecha_ingreso": fmt_fecha_larga_de(
                         eva.get("fecha_ingreso_raw")
                     ),
                     "genero": genero,

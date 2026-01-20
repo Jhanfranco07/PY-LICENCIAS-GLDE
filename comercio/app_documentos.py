@@ -16,6 +16,22 @@ from comercio.sheets_comercio import (
 from comercio.app_permisos import GIROS_OPCIONES
 
 
+def _to_upper(s: str) -> str:
+    return (s or "").strip().upper()
+
+
+def text_input_upper(label: str, key: str, **kwargs) -> str:
+    """
+    Text input que siempre guarda y devuelve en MAYÚSCULAS.
+    No usar para DNI / celulares.
+    """
+    v = st.text_input(label, key=key, **kwargs)
+    v_up = _to_upper(v)
+    if v != v_up:
+        st.session_state[key] = v_up
+    return v_up
+
+
 def _fmt_fecha_corta(d) -> str:
     try:
         return pd.to_datetime(d).strftime("%d/%m/%Y")
@@ -40,7 +56,7 @@ def _cb_autocomplete_dni_ds():
         nombre = dni_a_nombre_completo(res)
 
         if nombre:
-            st.session_state["nombre_ds"] = nombre
+            st.session_state["nombre_ds"] = _to_upper(nombre)
             st.session_state[
                 "dni_ds_msg"
             ] = "✅ DNI válido: nombre autocompletado."
@@ -94,7 +110,7 @@ def run_documentos_comercio():
 
     asunto_otro = ""
     if tipo_asunto == "OTROS (especificar)":
-        asunto_otro = st.text_input(
+        asunto_otro = text_input_upper(
             "Asunto (texto libre)*",
             key="asunto_otro",
             placeholder="Ej.: Solicitud de constancia, queja, etc.",
@@ -129,7 +145,7 @@ def run_documentos_comercio():
             on_change=_cb_autocomplete_dni_ds,
         )
     with c4:
-        nombre = st.text_input(
+        nombre = text_input_upper(
             "Nombre y apellido*",
             key="nombre_ds",
             value=st.session_state.get("nombre_ds", ""),
@@ -142,7 +158,7 @@ def run_documentos_comercio():
         else:
             st.warning(msg_dni)
 
-    domicilio = st.text_input("Domicilio fiscal*", key="domicilio_ds")
+    domicilio = text_input_upper("Domicilio fiscal*", key="domicilio_ds")
 
     # ------------------------------------------------------------------
     # Giro / motivo de la solicitud (condicional)
@@ -154,15 +170,15 @@ def run_documentos_comercio():
             key="giro_motivo_ds_select",
         )
         # Lo que se guarda en la hoja: GIRO O MOTIVO DE LA SOLICITUD
-        giro_motivo = giro_label
+        giro_motivo = _to_upper(giro_label)
     else:
-        giro_motivo = st.text_input(
+        giro_motivo = text_input_upper(
             "Giro o motivo de la solicitud*",
             key="giro_motivo_ds",
             placeholder="Describe el motivo de la solicitud",
         )
 
-    ubicacion = st.text_input(
+    ubicacion = text_input_upper(
         "Ubicación a solicitar*",
         key="ubicacion_ds",
         placeholder="Av./Jr./Parque ...",
@@ -182,7 +198,7 @@ def run_documentos_comercio():
 
     c5, c6, c7 = st.columns(3)
     with c5:
-        num_carta = st.text_input("N° de carta", key="num_carta_ds")
+        num_carta = text_input_upper("N° de carta", key="num_carta_ds")
     with c6:
         fecha_carta = st.date_input(
             "Fecha de la carta",
@@ -198,7 +214,7 @@ def run_documentos_comercio():
             format="DD/MM/YYYY",
         )
 
-    folios = st.text_input("Folios", key="folios_ds")
+    folios = text_input_upper("Folios", key="folios_ds")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -238,23 +254,23 @@ def run_documentos_comercio():
             try:
                 append_documento(
                     fecha_ingreso=_fmt_fecha_corta(fecha_ingreso),
-                    num_documento_simple=num_ds.strip(),
-                    asunto=asunto_final.strip(),
-                    nombre=nombre.strip(),
+                    num_documento_simple=_to_upper(num_ds),
+                    asunto=_to_upper(asunto_final),
+                    nombre=_to_upper(nombre),
                     dni=dni.strip(),
-                    domicilio_fiscal=domicilio.strip(),
-                    giro_motivo=giro_motivo.strip(),
-                    ubicacion_solicitar=ubicacion.strip(),
+                    domicilio_fiscal=_to_upper(domicilio),
+                    giro_motivo=_to_upper(giro_motivo),
+                    ubicacion_solicitar=_to_upper(ubicacion),
                     celular=celular.strip(),
-                    procedencia=procedencia.strip(),
-                    num_carta=num_carta.strip(),
+                    procedencia=_to_upper(procedencia),
+                    num_carta=_to_upper(num_carta),
                     fecha_carta=_fmt_fecha_corta(fecha_carta)
                     if fecha_carta
                     else "",
                     fecha_notificacion=_fmt_fecha_corta(fecha_notif)
                     if fecha_notif
                     else "",
-                    folios=folios.strip(),
+                    folios=_to_upper(folios),
                     estado="PENDIENTE",
                 )
                 st.success("Documento Simple registrado correctamente.")
