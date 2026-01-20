@@ -13,7 +13,7 @@ from google.oauth2.service_account import Credentials
 
 from utils import fecha_larga, safe_filename_pretty  # función común en utils.py
 
-# ✅ CODART (SUNAT) para autocompletar
+#  CODART (SUNAT) para autocompletar
 from integraciones.codart import CodartAPIError, consultar_ruc
 
 
