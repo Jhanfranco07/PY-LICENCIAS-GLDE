@@ -279,6 +279,20 @@ def _label_to_info(label: str):
             return item
     return None
 
+def _labels_from_raw_giro(giro_motivo_raw: str):
+    """
+    A partir del texto guardado en BD (en mayúsculas),
+    devuelve una lista de labels del catálogo GIROS_RUBROS
+    que aparecen dentro del texto.
+    Sirve tanto para 1 giro como para varios.
+    """
+    raw_up = (giro_motivo_raw or "").upper()
+    encontrados = []
+    for item in GIROS_RUBROS:
+        lab_up = item["label"].upper()
+        if lab_up and lab_up in raw_up:
+            encontrados.append(item["label"])
+    return encontrados
 
 # ========= Autocomplete DNI (Codart) =========
 def _init_dni_state():
@@ -377,6 +391,7 @@ def run_permisos_comercio():
 
         if st.button("📥 Cargar datos del D.S. seleccionado"):
             fila = df_docs.iloc[int(idx_sel)]
+
             st.session_state["ds"] = str(
                 fila.get("N° DE DOCUMENTO SIMPLE", "")
             )
@@ -394,47 +409,38 @@ def run_permisos_comercio():
                 fila.get("N° DE CELULAR", "")
             ).strip()
 
-            # GIRO O MOTIVO DE LA SOLICITUD -> se mapea al GIRO del módulo
+            # --- NUEVO: procesar GIRO del D.S. ---
             giro_motivo_raw = str(
                 fila.get("GIRO O MOTIVO DE LA SOLICITUD", "")
             ).strip()
 
-            # En referencia ya NO va el giro
+            # Por defecto, referencia vacía (ahí ya NO debe ir el giro)
             st.session_state["referencia"] = ""
 
-            if giro_motivo_raw:
-                # Caso típico: "LABEL1 Y LABEL2" (ambos vienen de GIROS_OPCIONES)
-                partes = [
-                    p.strip()
-                    for p in giro_motivo_raw.split(" Y ")
-                    if p.strip()
-                ]
+            # Buscamos qué giros del catálogo aparecen dentro del texto guardado
+            labels_giro = _labels_from_raw_giro(giro_motivo_raw)
 
-                # Primera parte -> label principal para el selectbox
-                if partes:
-                    info_primaria = _label_to_info(partes[0])
-                    if info_primaria:
-                        st.session_state["giro_label"] = info_primaria["label"]
-                        st.session_state[
-                            "giro_label_custom_source"
-                        ] = info_primaria["label"]
+            if labels_giro:
+                # Usamos el primer giro encontrado como seleccionado en el combo
+                label_principal = labels_giro[0]
+                st.session_state["giro_label"] = label_principal
+                st.session_state["giro_label_custom_source"] = label_principal
 
-                # Construimos descripción compuesta para el campo {{giro}}
+                # Armamos la descripción completa para las plantillas ({{giro}})
                 descripciones = []
-                for parte in partes:
-                    info = _label_to_info(parte)
+                for lab in labels_giro:
+                    info = _label_to_info(lab)
                     if info:
                         descripciones.append(info["giro"])
                 if descripciones:
-                    # Ej: "Bebidas saludables: ... y Sándwiches."
+                    # Ej.: "Bebidas saludables... y Sándwiches."
                     st.session_state["giro_texto_custom"] = " y ".join(
                         descripciones
                     )
-                else:
-                    # Si no coincide con catálogo, lo mandamos a referencia
-                    st.session_state["referencia"] = to_upper(
-                        giro_motivo_raw
-                    )
+            else:
+                # Si no coincide con ningún giro estándar,
+                # lo mandamos a referencia como texto libre
+                st.session_state["referencia"] = to_upper(giro_motivo_raw)
 
             st.session_state["fecha_ingreso"] = _parse_fecha_ddmmaaaa(
                 fila.get("FECHA DE INGRESO", "")
@@ -443,6 +449,7 @@ def run_permisos_comercio():
             st.success(
                 "Datos del Documento Simple cargados en el formulario."
             )
+
 
     st.markdown("---")
 
