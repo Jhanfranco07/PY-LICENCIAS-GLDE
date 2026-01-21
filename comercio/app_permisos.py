@@ -513,11 +513,11 @@ def run_permisos_comercio():
     with c4:
         plazo_unidad = st.selectbox(
             "Plazo*",
-            ["meses", "años"],
+            ["MESES", "años"],
             key="plazo",
             index=(
-                ["meses", "años"].index(st.session_state.get("plazo", "meses"))
-                if st.session_state.get("plazo", "meses") in ["meses", "años"]
+                ["MESES", "años"].index(st.session_state.get("plazo", "MESES"))
+                if st.session_state.get("plazo", "MESES") in ["MESES", "años"]
                 else 0
             ),
         )
