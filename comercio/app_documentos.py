@@ -1,5 +1,3 @@
-# comercio/app_documentos.py
-
 import pandas as pd
 import streamlit as st
 
@@ -154,13 +152,30 @@ def run_documentos_comercio():
     # Giro / motivo de la solicitud (condicional)
     # ------------------------------------------------------------------
     if tipo_asunto in ("RENOVACION", "SOLICITUD DE COMERCIO AMBULATORIO"):
-        giro_label = st.selectbox(
-            "Giro (según Ordenanza)*",
+        giro_label_1 = st.selectbox(
+            "Giro principal (según Ordenanza)*",
             GIROS_OPCIONES,
             key="giro_motivo_ds_select",
         )
-        # Lo que se guarda en la hoja: GIRO O MOTIVO DE LA SOLICITUD
-        giro_motivo = giro_label
+
+        add_segundo = st.checkbox(
+            "Agregar segundo giro (opcional)",
+            key="add_segundo_giro",
+        )
+
+        giro_label_2 = ""
+        if add_segundo:
+            opciones_segundo = [g for g in GIROS_OPCIONES if g != giro_label_1]
+            giro_label_2 = st.selectbox(
+                "Segundo giro (opcional)",
+                opciones_segundo,
+                key="giro_motivo_ds_select_2",
+            )
+
+        if giro_label_2:
+            giro_motivo = f"{giro_label_1} Y {giro_label_2}"
+        else:
+            giro_motivo = giro_label_1
     else:
         giro_motivo = st.text_input(
             "Giro o motivo de la solicitud*",

@@ -41,14 +41,12 @@ def to_upper(s: str) -> str:
 
 def text_input_upper(label: str, key: str, **kwargs) -> str:
     """
-    Wrapper de text_input que guarda y devuelve SIEMPRE en mayúsculas.
+    Wrapper de text_input que devuelve SIEMPRE en mayúsculas,
+    pero sin modificar directamente st.session_state[key].
     Úsalo solo para campos de texto, no para DNI o teléfonos.
     """
     v = st.text_input(label, key=key, **kwargs)
-    v_up = to_upper(v)
-    if v != v_up:
-        st.session_state[key] = v_up
-    return v_up
+    return to_upper(v)
 
 
 def fmt_fecha_corta(d) -> str:
@@ -271,6 +269,17 @@ GIROS_RUBROS = [
 GIROS_OPCIONES = [item["label"] for item in GIROS_RUBROS]
 
 
+def _label_to_info(label: str):
+    """Devuelve el dict de GIROS_RUBROS cuyo label coincida (case-insensitive)."""
+    if not label:
+        return None
+    label_up = label.strip().upper()
+    for item in GIROS_RUBROS:
+        if item["label"].strip().upper() == label_up:
+            return item
+    return None
+
+
 # ========= Autocomplete DNI (Codart) =========
 def _init_dni_state():
     st.session_state.setdefault("dni_lookup_msg", "")
@@ -316,6 +325,10 @@ def run_permisos_comercio():
     .stButton>button { border-radius: 10px; padding: .55rem 1rem; font-weight: 600; }
     .card { border: 1px solid #e5e7eb; border-radius: 16px; padding: 16px; margin-bottom: 12px; background: #0f172a08; }
     .hint { color:#64748b; font-size:.9rem; }
+    /* Solo apariencia: el valor real lo limpiamos en Python */
+    input[type="text"], textarea {
+        text-transform: uppercase;
+    }
     </style>
     """,
         unsafe_allow_html=True,
@@ -380,9 +393,48 @@ def run_permisos_comercio():
             st.session_state["telefono"] = str(
                 fila.get("N° DE CELULAR", "")
             ).strip()
-            st.session_state["referencia"] = to_upper(
+
+            # GIRO O MOTIVO DE LA SOLICITUD -> se mapea al GIRO del módulo
+            giro_motivo_raw = str(
                 fila.get("GIRO O MOTIVO DE LA SOLICITUD", "")
-            )
+            ).strip()
+
+            # En referencia ya NO va el giro
+            st.session_state["referencia"] = ""
+
+            if giro_motivo_raw:
+                # Caso típico: "LABEL1 Y LABEL2" (ambos vienen de GIROS_OPCIONES)
+                partes = [
+                    p.strip()
+                    for p in giro_motivo_raw.split(" Y ")
+                    if p.strip()
+                ]
+
+                # Primera parte -> label principal para el selectbox
+                if partes:
+                    info_primaria = _label_to_info(partes[0])
+                    if info_primaria:
+                        st.session_state["giro_label"] = info_primaria["label"]
+                        st.session_state[
+                            "giro_label_custom_source"
+                        ] = info_primaria["label"]
+
+                # Construimos descripción compuesta para el campo {{giro}}
+                descripciones = []
+                for parte in partes:
+                    info = _label_to_info(parte)
+                    if info:
+                        descripciones.append(info["giro"])
+                if descripciones:
+                    # Ej: "Bebidas saludables: ... y Sándwiches."
+                    st.session_state["giro_texto_custom"] = " y ".join(
+                        descripciones
+                    )
+                else:
+                    # Si no coincide con catálogo, lo mandamos a referencia
+                    st.session_state["referencia"] = to_upper(
+                        giro_motivo_raw
+                    )
 
             st.session_state["fecha_ingreso"] = _parse_fecha_ddmmaaaa(
                 fila.get("FECHA DE INGRESO", "")
@@ -469,12 +521,24 @@ def run_permisos_comercio():
         key="giro_label",
     )
 
-    giro_info = next(item for item in GIROS_RUBROS if item["label"] == giro_label)
-    giro_texto = giro_info["giro"]
-    rubro_num = giro_info["rubro"]
-    codigo_rubro = giro_info["codigo"]
+    giro_info = _label_to_info(giro_label)
+    giro_texto_base = giro_info["giro"] if giro_info else ""
+    giro_custom = st.session_state.get("giro_texto_custom", "")
+    giro_custom_source = st.session_state.get("giro_label_custom_source")
 
-    st.caption(f"Se usará el rubro {rubro_num} con el código {codigo_rubro}.")
+    # Si el texto custom viene del mismo giro que está seleccionado -> usarlo
+    if giro_custom and giro_custom_source == giro_label:
+        giro_texto = giro_custom
+    else:
+        giro_texto = giro_texto_base
+
+    rubro_num = giro_info["rubro"] if giro_info else ""
+    codigo_rubro = giro_info["codigo"] if giro_info else ""
+
+    if rubro_num and codigo_rubro:
+        st.caption(f"Se usará el rubro {rubro_num} con el código {codigo_rubro}.")
+    else:
+        st.caption("Selecciona un giro válido del catálogo.")
 
     ubicacion = text_input_upper(
         "Ubicación*",
@@ -513,11 +577,11 @@ def run_permisos_comercio():
     with c4:
         plazo_unidad = st.selectbox(
             "Plazo*",
-            ["MESES", "años"],
+            ["meses", "años"],
             key="plazo",
             index=(
-                ["MESES", "años"].index(st.session_state.get("plazo", "MESES"))
-                if st.session_state.get("plazo", "MESES") in ["MESES", "años"]
+                ["meses", "años"].index(st.session_state.get("plazo", "meses"))
+                if st.session_state.get("plazo", "meses") in ["meses", "años"]
                 else 0
             ),
         )
@@ -552,7 +616,7 @@ def run_permisos_comercio():
                 "dni": dni.strip(),
                 "ds": (ds or "").strip(),
                 "domicilio": to_upper(domicilio),
-                # ⬇️ ahora fecha de ingreso en largo: 16 de ENERO de 2026
+                # fecha de ingreso en largo: 16 de enero de 2026
                 "fecha_ingreso": fmt_fecha_larga_de(fecha_ingreso),
                 "fecha_evaluacion": fmt_fecha_larga(fecha_evaluacion),
                 "giro": giro_texto,
@@ -766,7 +830,7 @@ def run_permisos_comercio():
                     "cod_resolucion": str(cod_resolucion).strip(),
                     "fecha_resolucion": fmt_fecha_larga(fecha_resolucion),
                     "ds": str(eva.get("ds", "")).strip(),
-                    # ⬇️ ahora también en largo
+                    # ahora también en largo
                     "fecha_ingreso": fmt_fecha_larga_de(
                         eva.get("fecha_ingreso_raw")
                     ),
@@ -800,7 +864,7 @@ def run_permisos_comercio():
 
     st.markdown("---")
 
-    # ---------- Módulo 3: CERTIFICADO ----------
+    # ---------- Módulo 3: Certificado ----------
     st.header("Módulo 3 · Certificado")
     st.markdown('<div class="card">', unsafe_allow_html=True)
 
@@ -817,7 +881,7 @@ def run_permisos_comercio():
         if not eva:
             st.error(
                 "Primero completa y guarda la **Evaluación** y la "
-                "**Resolución** (vigencias)."
+                "**Resolución** (fechas/vigencias)."
             )
         else:
             v_cod_cert = st.session_state.get("cod_certificacion", "")
