@@ -15,7 +15,7 @@ def _val(v):
 
 def run_modulo_consultas():
     st.title("📄 Consultas (DNI / RUC)")
-    st.caption("Consulta RENIEC (DNI) y SUNAT (RUC) usando CODART. Datos restringidos pueden aparecer como 'Locked'.")
+    st.caption("Consulta RENIEC (DNI) y SUNAT (RUC) usando CODART.")
 
     tab_dni, tab_ruc = st.tabs(["DNI (RENIEC)", "RUC (SUNAT)"])
 
